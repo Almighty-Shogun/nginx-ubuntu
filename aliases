@@ -1,0 +1,9 @@
+# Custom aliases
+alias upgrade-deps="apt update && apt upgrade -y"
+alias reload-nginx="nginx -s reload"
+alias test-nginx="nginx -t"
+alias restart-php83="systemctl restart php8.3-fpm"
+alias restart-php84="systemctl restart php8.4-fpm"
+alias restart-php85="systemctl restart php8.5-fpm"
+alias fail2ban-status="fail2ban-client status"
+alias ufw-status="ufw status numbered"

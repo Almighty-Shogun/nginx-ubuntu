@@ -1,0 +1,208 @@
+#!/bin/bash
+set -euo pipefail
+
+# --- Creating color variables and logger methods. ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}[INFO]${NC}    $*"; }
+success() { echo -e "${GREEN}[OK]${NC}      $*"; }
+warning() { echo -e "${YELLOW}[WARN]${NC}   $*"; }
+error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
+ask()     { echo -e "${BOLD}$*${NC}"; }
+
+TEMPLATES_PATH="/etc/nginx/templates"
+
+# --- Check if script is executed as sudo with the correct arguments. ---
+[[ $EUID -ne 0 ]]  && error "Run this script with sudo."
+[[ $# -ne 1 ]]     && error "Usage: sudo create-website <domain.com>"
+
+DOMAIN="$1"
+
+# --- Checking if the domain is a valid domain name. ---
+if ! echo "$DOMAIN" | grep -qP '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$'; then
+    error "\"$DOMAIN\" doesn't look like a valid domain name."
+fi
+
+# --- Checking if domain or domain config already exists. ---
+[[ -d "/var/www/$DOMAIN" ]] && error "Directory /var/www/$DOMAIN already exists."
+[[ -f "/etc/nginx/sites-available/$DOMAIN" ]] && error "NGINX config for $DOMAIN already exists."
+
+# --- Checking if NGINX and CloudFlared are installed. ---
+command -v nginx &>/dev/null || error "NGINX is not installed."
+command -v cloudflared &>/dev/null || error "cloudflared is not installed."
+
+# --- Select website type. ---
+echo ""
+ask "What type of site is this?"
+echo ""
+echo "  [1] PHP"
+echo "  [2] ASP.NET"
+echo "  [3] Vue"
+echo ""
+read -rp "Enter number [1-3]: " SITE_TYPE
+
+case $SITE_TYPE in
+    1) SITE_LABEL="PHP"
+       TEMPLATE_PATH="$TEMPLATES_PATH/nginx-php.template" ;;
+    2) SITE_LABEL="ASP.NET"
+       TEMPLATE_PATH="$TEMPLATES_PATH/nginx-dotnet.template" ;;
+    3) SITE_LABEL="Vue"
+       TEMPLATE_PATH="$TEMPLATES_PATH/nginx-vue.template" ;;
+    *) error "Invalid choice." ;;
+esac
+
+# --- Check if the template exists. ---
+[[ ! -f "$TEMPLATE_PATH" ]] && error "Template not found at $TEMPLATE_PATH."
+
+# --- Options for PHP websites. ---
+PHP_VERSION=""
+if [[ "$SITE_TYPE" == "1" ]]; then
+    echo ""
+    ask "Which PHP version should this site use?"
+    echo ""
+
+    AVAILABLE_PHP=()
+    for ver in 8.3 8.4 8.5; do
+        if [[ -S "/run/php/php${ver}-fpm.sock" ]]; then
+            AVAILABLE_PHP+=("$ver")
+            echo "  [${#AVAILABLE_PHP[@]}] PHP $ver"
+        fi
+    done
+
+    [[ ${#AVAILABLE_PHP[@]} -eq 0 ]] && error "No PHP-FPM versions are running."
+
+    echo ""
+    read -rp "Enter number [1-${#AVAILABLE_PHP[@]}]: " PHP_CHOICE
+
+    if ! [[ "$PHP_CHOICE" =~ ^[0-9]+$ ]] || \
+       [[ "$PHP_CHOICE" -lt 1 ]] || \
+       [[ "$PHP_CHOICE" -gt ${#AVAILABLE_PHP[@]} ]]; then
+        error "Invalid choice."
+    fi
+
+    PHP_VERSION="${AVAILABLE_PHP[$((PHP_CHOICE - 1))]}"
+    success "Selected PHP $PHP_VERSION"
+fi
+
+# --- Options for ASP.NET websites. ---
+DOTNET_PORT=""
+if [[ "$SITE_TYPE" == "2" ]]; then
+    echo ""
+    read -rp "Which localhost port is your ASP.NET app running on? [default: 5000]: " DOTNET_PORT
+    DOTNET_PORT="${DOTNET_PORT:-5000}"
+    success "Using port $DOTNET_PORT"
+fi
+
+# --- Confirmation for www. ----
+echo ""
+ask "Should this site also cover www.$DOMAIN? [Y/n]"
+read -rp "> " INCLUDE_WWW
+INCLUDE_WWW="${INCLUDE_WWW:-Y}"
+
+# --- CloudFlared tunnel check. ---
+TUNNEL_NAME=$(cloudflared tunnel list 2>/dev/null | awk 'NR==2 {print $2}')
+[[ -z "$TUNNEL_NAME" ]] && error "No Cloudflare Tunnel found. Make sure cloudflared is set up."
+
+# --- Ask for domain confirmation. ---
+echo ""
+echo -e "${BOLD}Summary${NC}"
+echo "  Domain       : $DOMAIN"
+[[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && echo "  Also covers  : www.$DOMAIN"
+echo "  Type         : $SITE_LABEL"
+[[ -n "$PHP_VERSION" ]]  && echo "  PHP version  : $PHP_VERSION"
+[[ -n "$DOTNET_PORT" ]]  && echo "  .NET port    : $DOTNET_PORT"
+echo "  Tunnel       : $TUNNEL_NAME"
+echo "  Webroot      : /var/www/$DOMAIN/public"
+echo "  Logs         : /var/www/$DOMAIN/logs"
+echo "  NGINX config : /etc/nginx/sites-available/$DOMAIN"
+echo ""
+read -rp "Proceed? [Y/n] " CONFIRM
+CONFIRM="${CONFIRM:-Y}"
+[[ ! "$CONFIRM" =~ ^[Yy]$ ]] && { info "Aborted."; exit 0; }
+
+# --- Create directory structure. ---
+info "Creating directory structure..."
+mkdir -p "/var/www/$DOMAIN"/{public,logs}
+chown -R www-data:www-data "/var/www/$DOMAIN"
+chmod -R 755 "/var/www/$DOMAIN"
+
+# Drop a placeholder index file
+case $SITE_TYPE in
+    1) cat > "/var/www/$DOMAIN/public/index.php" <<EOF
+<?php
+// Placeholder — replace with your application files.
+echo '<h1>$DOMAIN is live</h1>';
+echo '<p>PHP ' . phpversion() . '</p>';
+EOF
+    chown www-data:www-data "/var/www/$DOMAIN/public/index.php" ;;
+
+    2) cat > "/var/www/$DOMAIN/public/index.html" <<EOF
+<!-- Placeholder — deploy your ASP.NET app to this server and point NGINX to its port. -->
+<h1>$DOMAIN — ASP.NET</h1>
+EOF
+    chown www-data:www-data "/var/www/$DOMAIN/public/index.html" ;;
+
+    3) cat > "/var/www/$DOMAIN/public/index.html" <<EOF
+<!-- Placeholder — run 'npm run build' and copy your dist/ folder contents here. -->
+<h1>$DOMAIN — Vue</h1>
+EOF
+    chown www-data:www-data "/var/www/$DOMAIN/public/index.html" ;;
+esac
+
+success "Directories created."
+
+# --- Create NGINX configuration. ---
+info "Generating NGINX config..."
+
+NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
+sed \
+    -e "s|{{DOMAIN}}|$DOMAIN|g" \
+    -e "s|{{PHP_VERSION}}|$PHP_VERSION|g" \
+    -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
+    "$TEMPLATE_PATH" > "$NGINX_CONF"
+
+if [[ ! "$INCLUDE_WWW" =~ ^[Yy]$ ]]; then
+    sed -i "s| www\.$DOMAIN||g" "$NGINX_CONF"
+fi
+
+success "Config written to $NGINX_CONF"
+
+# --- Enable website. ---
+info "Enabling site..."
+ln -s "$NGINX_CONF" "/etc/nginx/sites-enabled/$DOMAIN"
+success "Symlink created in sites-enabled."
+
+# --- Test and reload NGINX. ---
+info "Testing NGINX config..."
+nginx -t || {
+    warning "NGINX test failed — rolling back."
+    rm -f "/etc/nginx/sites-enabled/$DOMAIN"
+    error "Fix the config at $NGINX_CONF then re-enable manually."
+}
+
+nginx -s reload
+success "NGINX reloaded."
+
+# --- Route domain through CloudFlare tunnel. ---
+info "Routing $DOMAIN through Cloudflare Tunnel..."
+cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN"
+[[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && cloudflared tunnel route dns "$TUNNEL_NAME" "www.$DOMAIN"
+success "DNS routed through tunnel."
+
+# --- Script execution summary. ---
+echo ""
+echo -e "${GREEN}${BOLD}$DOMAIN is live!${NC}"
+echo ""
+echo "  Webroot  → /var/www/$DOMAIN/public"
+echo "  Logs     → /var/www/$DOMAIN/logs"
+echo "  Config   → /etc/nginx/sites-available/$DOMAIN"
+echo "  Type     → $SITE_LABEL"
+[[ -n "$PHP_VERSION" ]] && echo "  PHP      → $PHP_VERSION"
+[[ -n "$DOTNET_PORT" ]] && echo "  Port     → $DOTNET_PORT"
+echo "  Tunnel   → $TUNNEL_NAME"
+echo ""

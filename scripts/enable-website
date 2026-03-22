@@ -1,0 +1,56 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# --- Creating color variables and logger methods. ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}[INFO]${NC}    $*"; }
+success() { echo -e "${GREEN}[OK]${NC}      $*"; }
+warning() { echo -e "${YELLOW}[WARN]${NC}   $*"; }
+error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
+
+# --- Check if script is executed as sudo with the correct arguments. ---
+[[ $EUID -ne 0 ]] && error "Run this script with sudo."
+[[ $# -ne 1 ]]    && error "Usage: sudo enable-website <domain.com>"
+
+DOMAIN="$1"
+
+# --- Checking if domain has a configuration file. ---
+[[ ! -f "/etc/nginx/sites-available/$DOMAIN" ]] && error "No NGINX config found for $DOMAIN. Was it ever created?"
+
+# --- Checking if the domain is already enabled. ---
+if [[ -L "/etc/nginx/sites-enabled/$DOMAIN" ]]; then
+    warning "$DOMAIN is already enabled."
+    exit 0
+fi
+
+# --- Enable the domain. ---
+info "Creating symlink in sites-enabled..."
+ln -s "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
+success "Symlink created."
+
+# --- Testing and reloading NGINX. ---
+info "Testing NGINX config..."
+nginx -t || {
+    warning "NGINX config test failed — rolling back."
+    rm -f "/etc/nginx/sites-enabled/$DOMAIN"
+    error "Fix the config at /etc/nginx/sites-available/$DOMAIN then try again."
+}
+
+info "Reloading NGINX..."
+nginx -s reload
+success "NGINX reloaded."
+
+# --- Script execution summary. ---
+echo ""
+echo -e "${GREEN}${BOLD}$DOMAIN is enabled and live.${NC}"
+echo ""
+echo "  Webroot  → /var/www/$DOMAIN/public"
+echo "  Config   → /etc/nginx/sites-available/$DOMAIN"
+echo ""

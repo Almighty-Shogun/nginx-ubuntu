@@ -1,0 +1,64 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# --- Creating color variables and logger methods. ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}[INFO]${NC}    $*"; }
+success() { echo -e "${GREEN}[OK]${NC}      $*"; }
+warning() { echo -e "${YELLOW}[WARN]${NC}   $*"; }
+error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
+
+# --- Check if script is executed as sudo with the correct arguments. ---
+[[ $EUID -ne 0 ]] && error "Run this script with sudo."
+[[ $# -ne 1 ]]    && error "Usage: sudo disable-website <domain.com>"
+
+DOMAIN="$1"
+
+# --- Checking if domain has a configuration file. ---
+[[ ! -f "/etc/nginx/sites-available/$DOMAIN" ]] && error "No NGINX config found for $DOMAIN."
+
+# --- Checking if the website is already disabled. ---
+if [[ ! -L "/etc/nginx/sites-enabled/$DOMAIN" ]]; then
+    warning "$DOMAIN is already disabled."
+    exit 0
+fi
+
+# --- Ask for domain confirmation. ---
+echo ""
+echo -e "${BOLD}This will disable $DOMAIN without deleting any files.${NC}"
+echo "  NGINX config : kept at /etc/nginx/sites-available/$DOMAIN"
+echo "  Webroot      : kept at /var/www/$DOMAIN"
+echo "  Tunnel DNS   : kept in Cloudflare (site will show tunnel error)"
+echo ""
+read -rp "Proceed? [Y/n] " CONFIRM
+CONFIRM="${CONFIRM:-Y}"
+[[ ! "$CONFIRM" =~ ^[Yy]$ ]] && { info "Aborted."; exit 0; }
+
+# --- Disable the domain. ---
+info "Removing symlink from sites-enabled..."
+rm -f "/etc/nginx/sites-enabled/$DOMAIN"
+success "Symlink removed."
+
+# --- Testing and reloading NGINX. ---
+info "Testing NGINX config..."
+nginx -t || error "NGINX config test failed after disabling — check your configs."
+
+info "Reloading NGINX..."
+nginx -s reload
+success "NGINX reloaded."
+
+# --- Script execution summary. ---
+echo ""
+echo -e "${GREEN}${BOLD}$DOMAIN has been disabled.${NC}"
+echo ""
+echo "  Files are still at /var/www/$DOMAIN"
+echo "  To re-enable run: sudo enable-website $DOMAIN"
+echo "  To fully remove run: sudo remove-website $DOMAIN"
+echo ""

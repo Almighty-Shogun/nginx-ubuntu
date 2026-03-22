@@ -1,0 +1,33 @@
+server {
+    listen 80;
+    server_name {{DOMAIN}} www.{{DOMAIN}};
+
+    root /var/www/{{DOMAIN}}/public;
+    index index.html;
+
+    autoindex off;
+
+    access_log /var/www/{{DOMAIN}}/logs/access.log;
+    error_log /var/www/{{DOMAIN}}/logs/error.log warn;
+
+    include conf.d/cloudflare-real-ip.conf;
+    include conf.d/security-headers.conf;
+
+    # Deny hidden files (.htaccess, .env, .git, etc...)
+    location ~ /\. {
+        deny all;
+        return 404;
+    }
+
+    # Vue router — serve index.html for all routes so client-side routing works
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Static file caching
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|woff2|woff|svg|webp)$ {
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+        access_log off;
+    }
+}

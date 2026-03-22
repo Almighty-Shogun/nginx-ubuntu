@@ -188,8 +188,8 @@ success "NGINX reloaded."
 # --- Route domain through CloudFlare tunnel. ---
 info "Routing $DOMAIN through Cloudflare Tunnel..."
 
-cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN"
-[[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && cloudflared tunnel route dns "$TUNNEL_NAME" "www.$DOMAIN"
+cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$DOMAIN"
+[[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "www.$DOMAIN"
 
 success "DNS routed through tunnel."
 

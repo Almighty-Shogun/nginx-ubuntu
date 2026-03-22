@@ -64,7 +64,6 @@ success "NGINX has been installed and is running."
 
 # --- Installing MariaDB. ---
 info "Installing MariaDB..."
-curl -fsSL https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --mariadb-server-version=11 --skip-maxscale
 apt install mariadb-server -y
 systemctl enable --now mariadb
 success "MariaDB has been installed and is running."
@@ -187,7 +186,7 @@ success "MariaDB has been configured."
 
 # --- PostgreSQL configuration. ---
 info "Configuring PostgreSQL..."
-sudo -u postgres psql <<EOF
+sudo -u postgres psql -q <<EOF
 ALTER USER postgres WITH PASSWORD '$postDbPassword';
 \q
 EOF

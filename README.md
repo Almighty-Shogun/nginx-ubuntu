@@ -24,7 +24,7 @@ A personal setup script that installs and configures a production-ready NGINX se
 Run the following command on your server:
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main/setup.sh)
+sudo bash <(curl -fsSL https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main/nginx-install.sh)
 ```
 
 The script will ask you the following questions upfront before doing anything:
@@ -33,7 +33,7 @@ The script will ask you the following questions upfront before doing anything:
 - PostgreSQL root password
 - Cloudflare tunnel name
 
-After that it runs fully unattended until the Cloudflare authentication step, where it will print a URL for you to open in your browser to authorise the tunnel.
+After that it runs fully unattended until the Cloudflare authentication step, where it will print a URL for you to open in your browser to authorize the tunnel.
 
 ## After installation
 

@@ -98,13 +98,13 @@ apt upgrade -y
 for ver in 8.3 8.4 8.5; do
     info "Installing PHP ${ver} and extensions..."
 
-    EXTENSIONS="fpm,cli,mbstring,xml,curl,zip,bcmath,intl,gd,mysql,pgsql,sqlite3,redis,soap"
+    BASE_EXTENSIONS="php${ver}-fpm php${ver}-cli php${ver}-mbstring php${ver}-xml php${ver}-curl php${ver}-zip php${ver}-bcmath php${ver}-intl php${ver}-gd php${ver}-mysql php${ver}-pgsql php${ver}-sqlite3 php${ver}-redis php${ver}-soap"
 
     if [[ "$ver" != "8.5" ]]; then
-        EXTENSIONS="$EXTENSIONS,opcache"
+        BASE_EXTENSIONS="$BASE_EXTENSIONS php${ver}-opcache"
     fi
 
-    apt install -y openssl php${ver}-{$EXTENSIONS}
+    apt install -y openssl $BASE_EXTENSIONS
 
     systemctl enable --now php${ver}-fpm
 

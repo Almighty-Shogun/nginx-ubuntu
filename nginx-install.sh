@@ -44,42 +44,53 @@ done
 
 # --- Updating system ---
 info "Updating system packages..."
+
 apt update
 apt upgrade -y
+
 success "System packages have been updated."
 
 # --- Installing cURL ---
 info "Installing cURL..."
+
 apt install curl gnupg2 ca-certificates lsb-release -y
+
 success "cURL has been installed."
 
 # --- Installing NGINX ---
 info "Installing NGINX..."
+
 curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
 echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu noble nginx" | tee /etc/apt/sources.list.d/nginx.list
 apt update
 apt upgrade -y
 apt install nginx -y
 systemctl enable --now nginx
+
 success "NGINX has been installed and is running."
 
 # --- Installing MariaDB ---
 info "Installing MariaDB..."
+
 curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
 apt install mariadb-server -y
 systemctl enable --now mariadb
+
 success "MariaDB has been installed and is running."
 
 # --- Installing PostgreSQL ---
 info "Installing PostgreSQL..."
+
 apt install -y postgresql-common
 /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
 apt install postgresql-17 -y
 systemctl enable --now postgresql
+
 success "PostgreSQL has been installed and is running."
 
 # --- Installing PHP version(s) ---
 info "Adding PHP repository..."
+
 add-apt-repository ppa:ondrej/php -y
 apt update
 apt upgrade -y
@@ -87,31 +98,35 @@ apt upgrade -y
 for ver in 8.3 8.4 8.5; do
   info "Installing PHP ${ver} and extensions..."
 
-    apt install -y openssl php${ver}-{fpm,cli,mbstring,xml,curl,zip,bcmath,intl,gd,mysql,pgsql,sqlite3,redis,opcache,soap}
+  apt install -y openssl php${ver}-{fpm,cli,mbstring,xml,curl,zip,bcmath,intl,gd,mysql,pgsql,sqlite3,redis,opcache,soap}
+  systemctl enable --now php${ver}-fpm
 
-    systemctl enable php${ver}-fpm
-    systemctl start php${ver}-fpm
-
-    success "PHP ${ver} has been installed and is running."
+  success "PHP ${ver} has been installed and is running."
 done
 
 # --- Installing composer. ---
 info "Installing Composer..."
+
 curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
 success "Composer has been installed."
 
 # --- Installing .NET 10 SDK ---
 info "Installing .NET SDK 10..."
+
 apt install dotnet-sdk-10.0 -y
+
 success ".NET SDK has been installed."
 
 # --- Installing CloudFlare tunnel ---
 info "Installing Cloudflared..."
+
 curl -L https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
 echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main" | tee /etc/apt/sources.list.d/cloudflared.list
 apt update
 apt upgrade -y
 apt install cloudflared -y
+
 success "Cloudflared has been installed."
 
 # --- CloudFlare tunnel setup ---
@@ -122,8 +137,8 @@ echo ""
 cloudflared tunnel login
 cloudflared tunnel create "$tunnelName"
 cloudflared service install
-
 systemctl enable --now cloudflared
+
 success "Cloudflare Tunnel '$tunnelName' has been created and is running."
 
 # --- Installing custom scripts, templates, configs and aliases ---

@@ -136,18 +136,6 @@ apt install cloudflared -y
 
 success "Cloudflared has been installed."
 
-# --- CloudFlare tunnel setup ---
-echo ""
-info "Open the URL in the browser to authenticate with CloudFlare."
-echo ""
-
-cloudflared tunnel login
-cloudflared tunnel create "$tunnelName"
-cloudflared service install
-systemctl enable --now cloudflared
-
-success "Cloudflare Tunnel '$tunnelName' has been created and is running."
-
 # --- Installing custom scripts, templates, configs and aliases ---
 info "Downloading files from GitHub..."
 
@@ -185,6 +173,28 @@ if ! grep -q "# Custom aliases" ~/.bashrc; then
 else
   warning "Aliases already present in ~/.bashrc, skipping."
 fi
+
+mkdir -p /etc/cloudflared
+curl -fsSL "$GITHUB_RAW/cloudflared/config.yml" -o /etc/cloudflared/config.yml
+
+success "CloudFlared configuration has been installed."
+
+# --- CloudFlare tunnel setup ---
+echo ""
+info "Open the URL in the browser to authenticate with CloudFlare."
+echo ""
+
+cloudflared tunnel login
+cloudflared tunnel create "$tunnelName"
+
+TUNNEL_ID=$(cloudflared tunnel list | grep "$tunnelName" | awk '{print $1}')
+sed -i "s|{{TUNNEL_NAME}}|$tunnelName|g" /etc/cloudflared/config.yml
+sed -i "s|{{TUNNEL_ID}}|$TUNNEL_ID|g" /etc/cloudflared/config.yml
+
+cloudflared service install
+systemctl enable --now cloudflared
+
+success "Cloudflare Tunnel '$tunnelName' has been created and is running."
 
 # --- MariaDB configuration. ---
 info "Configuring MariaDB..."

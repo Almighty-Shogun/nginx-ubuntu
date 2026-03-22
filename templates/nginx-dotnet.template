@@ -7,8 +7,8 @@ server {
 
     autoindex off;
 
-    include conf.d/cloudflare-real-ip.conf;
-    include conf.d/security-headers.conf;
+    include snippets/cloudflare-real-ip.conf;
+    include snippets/security-headers.conf;
 
     # Deny hidden files (.htaccess, .env, .git, etc...)
     location ~ /\. {

@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -euo pipefail
 
 # --- Creating color variables and logger methods. ---
@@ -17,34 +16,41 @@ error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
 
 # --- Check if script is executed as sudo with the correct arguments. ---
 [[ $EUID -ne 0 ]] && error "Run this script with sudo."
-[[ $# -ne 1 ]]    && error "Usage: sudo enable-website <domain.com>"
+[[ $# -ne 1 ]] && error "Usage: sudo enable-website <domain.com>"
 
 DOMAIN="$1"
+NGINX_CONF="/etc/nginx/conf.d/$DOMAIN.conf"
+NGINX_CONF_DISABLED="/etc/nginx/conf.d/$DOMAIN.conf.disabled"
 
-# --- Checking if domain has a configuration file. ---
-[[ ! -f "/etc/nginx/sites-available/$DOMAIN" ]] && error "No NGINX config found for $DOMAIN. Was it ever created?"
+# --- Checking if domain has a disabled configuration file. ---
+[[ ! -f "$NGINX_CONF_DISABLED" ]] && error "No disabled NGINX config found for $DOMAIN. Was it ever disabled?"
 
 # --- Checking if the domain is already enabled. ---
-if [[ -L "/etc/nginx/sites-enabled/$DOMAIN" ]]; then
+if [[ -f "$NGINX_CONF" ]]; then
     warning "$DOMAIN is already enabled."
     exit 0
 fi
 
-# --- Enable the domain. ---
-info "Creating symlink in sites-enabled..."
-ln -s "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
-success "Symlink created."
+# --- Enable the domain by renaming the config back. ---
+info "Enabling site..."
+
+mv "$NGINX_CONF_DISABLED" "$NGINX_CONF"
+
+success "Config restored to $DOMAIN.conf"
 
 # --- Testing and reloading NGINX. ---
 info "Testing NGINX config..."
+
 nginx -t || {
     warning "NGINX config test failed — rolling back."
-    rm -f "/etc/nginx/sites-enabled/$DOMAIN"
-    error "Fix the config at /etc/nginx/sites-available/$DOMAIN then try again."
+    mv "$NGINX_CONF" "$NGINX_CONF_DISABLED"
+    error "Fix the config at $NGINX_CONF_DISABLED then try again."
 }
 
 info "Reloading NGINX..."
+
 nginx -s reload
+
 success "NGINX reloaded."
 
 # --- Script execution summary. ---
@@ -52,5 +58,5 @@ echo ""
 echo -e "${GREEN}${BOLD}$DOMAIN is enabled and live.${NC}"
 echo ""
 echo "  Webroot  → /var/www/$DOMAIN/public"
-echo "  Config   → /etc/nginx/sites-available/$DOMAIN"
+echo "  Config   → /etc/nginx/conf.d/$DOMAIN.conf"
 echo ""

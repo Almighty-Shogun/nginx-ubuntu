@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -euo pipefail
 
 # --- Creating color variables and logger methods. ---
@@ -13,11 +12,12 @@ info()    { echo -e "${CYAN}[INFO]${NC}    $*"; }
 success() { echo -e "${GREEN}[OK]${NC}      $*"; }
 warning() { echo -e "${YELLOW}[WARN]${NC}   $*"; }
 error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
+silent()  { "$@" > /dev/null; }
 
 # --- Checking if script was called from sudo. ---
 [[ $EUID -ne 0 ]] && error "Run this script with sudo."
 
-# --- General questions ---
+# --- General questions. ---
 echo ""
 info "A few questions before we start the configuration..."
 echo ""
@@ -42,58 +42,58 @@ while true; do
   echo "You did not provide a tunnel name. Please try again."
 done
 
-# --- Updating system ---
+# --- Updating system. ---
 info "Updating system packages..."
 
-apt update
-apt upgrade -y
+silent apt update
+silent apt upgrade -y
 
 success "System packages have been updated."
 
-# --- Installing cURL ---
+# --- Installing cURL. ---
 info "Installing cURL..."
 
-apt install curl gnupg2 ca-certificates lsb-release -y
+silent apt install curl gnupg2 ca-certificates lsb-release -y
 
 success "cURL has been installed."
 
-# --- Installing NGINX ---
+# --- Installing NGINX. ---
 info "Installing NGINX..."
 
-curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu noble nginx" | tee /etc/apt/sources.list.d/nginx.list
-apt update
-apt upgrade -y
-apt install nginx -y
+curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu noble nginx" | tee /etc/apt/sources.list.d/nginx.list > /dev/null
+silent apt update
+silent apt upgrade -y
+silent apt install nginx -y
 systemctl enable --now nginx
 
 success "NGINX has been installed and is running."
 
-# --- Installing MariaDB ---
+# --- Installing MariaDB. ---
 info "Installing MariaDB..."
 
-curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
-apt install mariadb-server -y
+curl -fsSL https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | silent bash
+silent apt install mariadb-server -y
 systemctl enable --now mariadb
 
 success "MariaDB has been installed and is running."
 
-# --- Installing PostgreSQL ---
+# --- Installing PostgreSQL. ---
 info "Installing PostgreSQL..."
 
-apt install -y postgresql-common
-/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-apt install postgresql-17 -y
+silent apt install -y postgresql-common
+/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+silent apt install postgresql-17 -y
 systemctl enable --now postgresql
 
 success "PostgreSQL has been installed and is running."
 
-# --- Installing PHP version(s) ---
+# --- Installing PHP version(s). ---
 info "Adding PHP repository..."
 
-add-apt-repository ppa:ondrej/php -y
-apt update
-apt upgrade -y
+silent add-apt-repository ppa:ondrej/php -y
+silent apt update
+silent apt upgrade -y
 
 for ver in 8.3 8.4 8.5; do
     info "Installing PHP ${ver} and extensions..."
@@ -104,39 +104,38 @@ for ver in 8.3 8.4 8.5; do
         BASE_EXTENSIONS="$BASE_EXTENSIONS php${ver}-opcache"
     fi
 
-    apt install -y openssl $BASE_EXTENSIONS
-
+    silent apt install -y openssl $BASE_EXTENSIONS
     systemctl enable --now php${ver}-fpm
 
     success "PHP ${ver} has been installed and is running."
 done
 
-# --- Installing composer. ---
+# --- Installing Composer. ---
 info "Installing Composer..."
 
-curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+curl -fsSL https://getcomposer.org/installer | silent php -- --install-dir=/usr/local/bin --filename=composer
 
 success "Composer has been installed."
 
-# --- Installing .NET 10 SDK ---
+# --- Installing .NET 10 SDK. ---
 info "Installing .NET SDK 10..."
 
-apt install dotnet-sdk-10.0 -y
+silent apt install dotnet-sdk-10.0 -y
 
 success ".NET SDK has been installed."
 
-# --- Installing CloudFlare tunnel ---
+# --- Installing CloudFlare tunnel. ---
 info "Installing Cloudflared..."
 
-curl -L https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main" | tee /etc/apt/sources.list.d/cloudflared.list
-apt update
-apt upgrade -y
-apt install cloudflared -y
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main" | tee /etc/apt/sources.list.d/cloudflared.list > /dev/null
+silent apt update
+silent apt upgrade -y
+silent apt install cloudflared -y
 
 success "Cloudflared has been installed."
 
-# --- Installing custom scripts, templates, configs and aliases ---
+# --- Installing custom scripts, templates, configs and aliases. ---
 info "Downloading files from GitHub..."
 
 GITHUB_RAW="https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main"
@@ -144,52 +143,51 @@ GITHUB_RAW="https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main"
 for script in create-website disable-website enable-website remove-website; do
     curl -fsSL "$GITHUB_RAW/scripts/$script" -o /usr/local/bin/$script
     chmod +x /usr/local/bin/$script
-
     success "$script has been installed."
 done
 
 mkdir -p /etc/nginx/templates
 for template in nginx-php nginx-dotnet nginx-vue; do
     curl -fsSL "$GITHUB_RAW/templates/$template.template" -o /etc/nginx/templates/$template.template
-
     success "$template.template has been installed."
 done
 
-mkdir -p /etc/nginx/conf.d
-for conf in cloudflare-real-ip security-headers; do
-    curl -fsSL "$GITHUB_RAW/conf.d/$conf.conf" -o /etc/nginx/conf.d/$conf.conf
-
+mkdir -p /etc/nginx/snippets
+for conf in cloudflare-real-ip security-headers fastcgi-php; do
+    curl -fsSL "$GITHUB_RAW/snippets/$conf.conf" -o /etc/nginx/snippets/$conf.conf
     success "$conf.conf has been installed."
 done
 
 curl -fsSL "$GITHUB_RAW/aliases" -o /tmp/aliases
 
 if ! grep -q "# Custom aliases" ~/.bashrc; then
-  echo "" >> ~/.bashrc
-  cat /tmp/aliases >> ~/.bashrc
-  rm /tmp/aliases
-
-  success "Aliases have been added to ~/.bashrc"
+    echo "" >> ~/.bashrc
+    cat /tmp/aliases >> ~/.bashrc
+    rm /tmp/aliases
+    success "Aliases have been added to ~/.bashrc"
 else
-  warning "Aliases already present in ~/.bashrc, skipping."
+    warning "Aliases already present in ~/.bashrc, skipping."
 fi
 
 curl -fsSL "$GITHUB_RAW/cloudflared/config.yml" -o /tmp/cloudflared-config.yml
 
-success "CloudFlared configuration has been installed."
+success "CloudFlared configuration has been downloaded."
 
-# --- CloudFlare tunnel setup ---
+# --- CloudFlare tunnel setup. ---
 echo ""
 info "Open the URL in the browser to authenticate with CloudFlare."
 echo ""
+
+rm -f /root/.cloudflared/cert.pem
+rm -f /root/.cloudflared/*.json
 
 cloudflared tunnel login
 cloudflared tunnel create "$tunnelName"
 
 TUNNEL_ID=$(cloudflared tunnel list | grep "$tunnelName" | awk '{print $1}')
+mkdir -p /etc/cloudflared
 cp /tmp/cloudflared-config.yml /etc/cloudflared/config.yml
 rm /tmp/cloudflared-config.yml
-mkdir -p /etc/cloudflared
 sed -i "s|{{TUNNEL_NAME}}|$tunnelName|g" /etc/cloudflared/config.yml
 sed -i "s|{{TUNNEL_ID}}|$TUNNEL_ID|g" /etc/cloudflared/config.yml
 
@@ -205,8 +203,8 @@ mariadb <<EOF
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$mariaDbPassword';
 FLUSH PRIVILEGES;
 EOF
-
 systemctl restart mariadb
+
 success "MariaDB has been configured."
 
 # --- PostgreSQL configuration. ---
@@ -216,8 +214,8 @@ sudo -u postgres psql <<EOF
 ALTER USER postgres WITH PASSWORD '$postDbPassword';
 \q
 EOF
-
 systemctl restart postgresql
+
 success "PostgreSQL has been configured."
 
 # --- Script execution summary. ---

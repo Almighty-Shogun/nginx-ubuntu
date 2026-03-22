@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -euo pipefail
 
 # --- Creating color variables and logger methods. ---
@@ -17,12 +16,16 @@ error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
 
 # --- Check if script is executed as sudo with the correct arguments. ---
 [[ $EUID -ne 0 ]] && error "Run this script with sudo."
-[[ $# -ne 1 ]]    && error "Usage: sudo remove-website <domain.com>"
+[[ $# -ne 1 ]] && error "Usage: sudo remove-website <domain.com>"
 
 DOMAIN="$1"
+NGINX_CONF="/etc/nginx/conf.d/$DOMAIN.conf"
+NGINX_CONF_DISABLED="/etc/nginx/conf.d/$DOMAIN.conf.disabled"
 
-# --- Checking if domain has a configuration file. ---
-[[ ! -f "/etc/nginx/sites-available/$DOMAIN" ]] && error "No NGINX config found for $DOMAIN."
+# --- Checking if domain has a configuration file (active or disabled). ---
+if [[ ! -f "$NGINX_CONF" ]] && [[ ! -f "$NGINX_CONF_DISABLED" ]]; then
+    error "No NGINX config found for $DOMAIN."
+fi
 
 # --- Checking if CloudFlared is installed. ---
 command -v cloudflared &>/dev/null || error "cloudflared is not installed."
@@ -34,10 +37,10 @@ echo ""
 echo -e "${RED}${BOLD}WARNING — This will permanently delete everything for $DOMAIN.${NC}"
 echo ""
 echo "  Will be removed:"
-echo "    NGINX config : /etc/nginx/sites-available/$DOMAIN"
-echo "    NGINX symlink: /etc/nginx/sites-enabled/$DOMAIN"
-[[ -d "/var/www/$DOMAIN" ]] && echo "    Webroot      : /var/www/$DOMAIN (all files)"
-[[ -n "$TUNNEL_NAME" ]]     && echo "    Tunnel DNS   : $DOMAIN and www.$DOMAIN records"
+[[ -f "$NGINX_CONF" ]]          && echo "    NGINX config : /etc/nginx/conf.d/$DOMAIN.conf"
+[[ -f "$NGINX_CONF_DISABLED" ]] && echo "    NGINX config : /etc/nginx/conf.d/$DOMAIN.conf.disabled"
+[[ -d "/var/www/$DOMAIN" ]]     && echo "    Webroot      : /var/www/$DOMAIN (all files)"
+[[ -n "$TUNNEL_NAME" ]]         && echo "    Tunnel DNS   : $DOMAIN and www.$DOMAIN records"
 echo ""
 warning "This cannot be undone. Make sure you have a backup if needed."
 echo ""
@@ -50,23 +53,25 @@ if [[ "$CONFIRM_DOMAIN" != "$DOMAIN" ]]; then
 fi
 
 # --- Removing NGINX configuration. ---
-info "Removing NGINX symlink..."
-rm -f "/etc/nginx/sites-enabled/$DOMAIN"
-success "Symlink removed."
-
 info "Removing NGINX config..."
-rm -f "/etc/nginx/sites-available/$DOMAIN"
+
+rm -f "$NGINX_CONF"
+rm -f "$NGINX_CONF_DISABLED"
+
 success "NGINX config removed."
 
 # --- Testing and reloading NGINX. ---
 info "Testing NGINX config..."
+
 nginx -t || error "NGINX config test failed after removal — check your other configs."
 
 info "Reloading NGINX..."
+
 nginx -s reload
+
 success "NGINX reloaded."
 
-# --- Removing website. ---
+# --- Removing webroot. ---
 if [[ -d "/var/www/$DOMAIN" ]]; then
     info "Removing webroot..."
     rm -rf "/var/www/$DOMAIN"
@@ -76,8 +81,10 @@ fi
 # --- Remove CloudFlare DNS tunnel. ---
 if [[ -n "$TUNNEL_NAME" ]]; then
     info "Removing Cloudflare Tunnel DNS records..."
-    cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$DOMAIN" 2>/dev/null || warning "Could not remove DNS record for $DOMAIN — remove it manually in Cloudflare dashboard."
-    cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "www.$DOMAIN" 2>/dev/null || warning "Could not remove DNS record for www.$DOMAIN — remove it manually in Cloudflare dashboard."
+    cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$DOMAIN" 2>/dev/null || \
+        warning "Could not remove DNS record for $DOMAIN — remove it manually in Cloudflare dashboard."
+    cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "www.$DOMAIN" 2>/dev/null || \
+        warning "Could not remove DNS record for www.$DOMAIN — remove it manually in Cloudflare dashboard."
     success "Tunnel DNS records removed."
 fi
 

@@ -18,8 +18,8 @@ ask()     { echo -e "${BOLD}$*${NC}"; }
 TEMPLATES_PATH="/etc/nginx/templates"
 
 # --- Check if script is executed as sudo with the correct arguments. ---
-[[ $EUID -ne 0 ]]  && error "Run this script with sudo."
-[[ $# -ne 1 ]]     && error "Usage: sudo create-website <domain.com>"
+[[ $EUID -ne 0 ]] && error "Run this script with sudo."
+[[ $# -ne 1 ]] && error "Usage: sudo create-website <domain.com>"
 
 DOMAIN="$1"
 
@@ -29,8 +29,8 @@ if ! echo "$DOMAIN" | grep -qP '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.
 fi
 
 # --- Checking if domain or domain config already exists. ---
-[[ -d "/var/www/$DOMAIN" ]] && error "Directory /var/www/$DOMAIN already exists."
-[[ -f "/etc/nginx/sites-available/$DOMAIN" ]] && error "NGINX config for $DOMAIN already exists."
+[[ -d "/var/www/$DOMAIN" ]]               && error "Directory /var/www/$DOMAIN already exists."
+[[ -f "/etc/nginx/conf.d/$DOMAIN.conf" ]] && error "NGINX config for $DOMAIN already exists."
 
 # --- Checking if NGINX and CloudFlared are installed. ---
 command -v nginx &>/dev/null || error "NGINX is not installed."
@@ -98,7 +98,7 @@ if [[ "$SITE_TYPE" == "2" ]]; then
     success "Using port $DOTNET_PORT"
 fi
 
-# --- Confirmation for www. ----
+# --- Confirmation for www. ---
 echo ""
 ask "Should this site also cover www.$DOMAIN? [Y/n]"
 read -rp "> " INCLUDE_WWW
@@ -119,7 +119,7 @@ echo "  Type         : $SITE_LABEL"
 echo "  Tunnel       : $TUNNEL_NAME"
 echo "  Webroot      : /var/www/$DOMAIN/public"
 echo "  Logs         : /var/www/$DOMAIN/logs"
-echo "  NGINX config : /etc/nginx/sites-available/$DOMAIN"
+echo "  NGINX config : /etc/nginx/conf.d/$DOMAIN.conf"
 echo ""
 read -rp "Proceed? [Y/n] " CONFIRM
 CONFIRM="${CONFIRM:-Y}"
@@ -127,11 +127,11 @@ CONFIRM="${CONFIRM:-Y}"
 
 # --- Create directory structure. ---
 info "Creating directory structure..."
+
 mkdir -p "/var/www/$DOMAIN"/{public,logs}
 chown -R www-data:www-data "/var/www/$DOMAIN"
 chmod -R 755 "/var/www/$DOMAIN"
 
-# Drop a placeholder index file
 case $SITE_TYPE in
     1) cat > "/var/www/$DOMAIN/public/index.php" <<EOF
 <?php
@@ -159,7 +159,7 @@ success "Directories created."
 # --- Create NGINX configuration. ---
 info "Generating NGINX config..."
 
-NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
+NGINX_CONF="/etc/nginx/conf.d/$DOMAIN.conf"
 sed \
     -e "s|{{DOMAIN}}|$DOMAIN|g" \
     -e "s|{{PHP_VERSION}}|$PHP_VERSION|g" \
@@ -172,26 +172,25 @@ fi
 
 success "Config written to $NGINX_CONF"
 
-# --- Enable website. ---
-info "Enabling site..."
-ln -s "$NGINX_CONF" "/etc/nginx/sites-enabled/$DOMAIN"
-success "Symlink created in sites-enabled."
-
 # --- Test and reload NGINX. ---
 info "Testing NGINX config..."
+
 nginx -t || {
     warning "NGINX test failed — rolling back."
-    rm -f "/etc/nginx/sites-enabled/$DOMAIN"
+    rm -f "$NGINX_CONF"
     error "Fix the config at $NGINX_CONF then re-enable manually."
 }
 
 nginx -s reload
+
 success "NGINX reloaded."
 
 # --- Route domain through CloudFlare tunnel. ---
 info "Routing $DOMAIN through Cloudflare Tunnel..."
+
 cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN"
 [[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && cloudflared tunnel route dns "$TUNNEL_NAME" "www.$DOMAIN"
+
 success "DNS routed through tunnel."
 
 # --- Script execution summary. ---
@@ -200,7 +199,7 @@ echo -e "${GREEN}${BOLD}$DOMAIN is live!${NC}"
 echo ""
 echo "  Webroot  → /var/www/$DOMAIN/public"
 echo "  Logs     → /var/www/$DOMAIN/logs"
-echo "  Config   → /etc/nginx/sites-available/$DOMAIN"
+echo "  Config   → /etc/nginx/conf.d/$DOMAIN.conf"
 echo "  Type     → $SITE_LABEL"
 [[ -n "$PHP_VERSION" ]] && echo "  PHP      → $PHP_VERSION"
 [[ -n "$DOTNET_PORT" ]] && echo "  Port     → $DOTNET_PORT"

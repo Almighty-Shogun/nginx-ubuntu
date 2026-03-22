@@ -1,0 +1,5 @@
+tunnel: {{TUNNEL_NAME}}
+credentials-file: /root/.cloudflared/{{TUNNEL_ID}}.json
+
+ingress:
+  - service: http://localhost:80

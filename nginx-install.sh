@@ -156,7 +156,7 @@ for template in nginx-php nginx-dotnet nginx-vue; do
 done
 
 mkdir -p /etc/nginx/conf.d
-for conf in cloudflare-realip security-headers; do
+for conf in cloudflare-real-ip security-headers; do
     curl -fsSL "$GITHUB_RAW/conf.d/$conf.conf" -o /etc/nginx/conf.d/$conf.conf
 
     success "$conf.conf has been installed."

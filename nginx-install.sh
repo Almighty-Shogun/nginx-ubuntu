@@ -92,6 +92,10 @@ for ver in 8.3 8.4 8.5; do
     fi
 
     apt install -y openssl $BASE_EXTENSIONS
+
+    sed -i 's/listen.owner = www-data/listen.owner = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
+    sed -i 's/listen.group = www-data/listen.group = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
+
     systemctl enable --now php${ver}-fpm
 
     success "PHP ${ver} has been installed and is running."

@@ -8,12 +8,10 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-info()       { echo -e "${CYAN}[INFO]${NC}    $*"; }
-success()    { echo -e "${GREEN}[OK]${NC}      $*"; }
-warning()    { echo -e "${YELLOW}[WARN]${NC}   $*"; }
-error()      { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
-silent()     { "$@" > /dev/null; }
-silent-apt() { "$@" -qq > /dev/null; }
+info()    { echo -e "${CYAN}[INFO]${NC}    $*"; }
+success() { echo -e "${GREEN}[OK]${NC}      $*"; }
+warning() { echo -e "${YELLOW}[WARN]${NC}   $*"; }
+error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
 
 # --- Checking if script was called from sudo. ---
 [[ $EUID -ne 0 ]] && error "Run this script with sudo."
@@ -45,45 +43,45 @@ done
 
 # --- Updating system. ---
 info "Updating system packages..."
-silent-apt apt update
-silent-apt apt upgrade -y
+apt update
+apt upgrade -y
 success "System packages have been updated."
 
 # --- Installing cURL. ---
 info "Installing cURL..."
-silent-apt apt install curl gnupg2 ca-certificates lsb-release -y
+apt install curl gnupg2 ca-certificates lsb-release -y
 success "cURL has been installed."
 
 # --- Installing NGINX. ---
 info "Installing NGINX..."
 curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg > /dev/null
 echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu noble nginx" | tee /etc/apt/sources.list.d/nginx.list > /dev/null
-silent-apt apt update
-silent-apt apt upgrade -y
-silent-apt apt install nginx -y
+apt update
+apt upgrade -y
+apt install nginx -y
 systemctl enable --now nginx
 success "NGINX has been installed and is running."
 
 # --- Installing MariaDB. ---
 info "Installing MariaDB..."
-curl -fsSL https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | silent bash
-silent-apt apt install mariadb-server -y
+curl -fsSL https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash -s -- --mariadb-server-version=11 --skip-maxscale
+apt install mariadb-server -y
 systemctl enable --now mariadb
 success "MariaDB has been installed and is running."
 
 # --- Installing PostgreSQL. ---
 info "Installing PostgreSQL..."
-silent-apt apt install -y postgresql-common
+apt install -y postgresql-common
 /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
-silent-apt apt install postgresql-17 -y
+apt install postgresql-17 -y
 systemctl enable --now postgresql
 success "PostgreSQL has been installed and is running."
 
 # --- Installing PHP version(s). ---
 info "Adding PHP repository..."
-silent add-apt-repository ppa:ondrej/php -y
-silent-apt apt update
-silent-apt apt upgrade -y
+add-apt-repository ppa:ondrej/php -y
+apt update
+apt upgrade -y
 
 for ver in 8.3 8.4 8.5; do
     info "Installing PHP ${ver} and extensions..."
@@ -94,7 +92,7 @@ for ver in 8.3 8.4 8.5; do
         BASE_EXTENSIONS="$BASE_EXTENSIONS php${ver}-opcache"
     fi
 
-    silent-apt apt install -y openssl $BASE_EXTENSIONS
+    apt install -y openssl $BASE_EXTENSIONS
     systemctl enable --now php${ver}-fpm
 
     success "PHP ${ver} has been installed and is running."
@@ -102,21 +100,21 @@ done
 
 # --- Installing Composer. ---
 info "Installing Composer..."
-curl -fsSL https://getcomposer.org/installer | silent php -- --install-dir=/usr/local/bin --filename=composer
+curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 success "Composer has been installed."
 
 # --- Installing .NET 10 SDK. ---
 info "Installing .NET SDK 10..."
-silent-apt apt install dotnet-sdk-10.0 -y
+apt install dotnet-sdk-10.0 -y
 success ".NET SDK has been installed."
 
 # --- Installing CloudFlare tunnel. ---
 info "Installing Cloudflared..."
 curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg > /dev/null
 echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main" | tee /etc/apt/sources.list.d/cloudflared.list > /dev/null
-silent-apt apt update
-silent-apt apt upgrade -y
-silent-apt apt install cloudflared -y
+apt update
+apt upgrade -y
+apt install cloudflared -y
 success "Cloudflared has been installed."
 
 # --- Installing custom scripts, templates, configs and aliases. ---

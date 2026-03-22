@@ -24,7 +24,8 @@ A personal setup script that installs and configures a production-ready NGINX se
 Run the following command on your server:
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main/nginx-install.sh)
+curl -fsSL https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main/nginx-install.sh -o setup.sh
+sudo bash setup.sh
 ```
 
 The script will ask you the following questions upfront before doing anything:
@@ -42,6 +43,7 @@ Once the script finishes, make sure to do the following:
 1. Configure the Cloudflare tunnel routing in your Cloudflare dashboard
 2. Set Cloudflare SSL mode to **Full (strict)** in your Cloudflare dashboard
 3. Run `source ~/.bashrc` to activate the aliases in your current session
+4. Remove the `setup.sh` script using `rm setup.sh`
 
 ## Managing websites
 

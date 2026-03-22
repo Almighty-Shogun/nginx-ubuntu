@@ -96,12 +96,19 @@ apt update
 apt upgrade -y
 
 for ver in 8.3 8.4 8.5; do
-  info "Installing PHP ${ver} and extensions..."
+    info "Installing PHP ${ver} and extensions..."
 
-  apt install -y openssl php${ver}-{fpm,cli,mbstring,xml,curl,zip,bcmath,intl,gd,mysql,pgsql,sqlite3,redis,opcache,soap}
-  systemctl enable --now php${ver}-fpm
+    EXTENSIONS="fpm,cli,mbstring,xml,curl,zip,bcmath,intl,gd,mysql,pgsql,sqlite3,redis,soap"
 
-  success "PHP ${ver} has been installed and is running."
+    if [[ "$ver" != "8.5" ]]; then
+        EXTENSIONS="$EXTENSIONS,opcache"
+    fi
+
+    apt install -y openssl php${ver}-{$EXTENSIONS}
+
+    systemctl enable --now php${ver}-fpm
+
+    success "PHP ${ver} has been installed and is running."
 done
 
 # --- Installing composer. ---

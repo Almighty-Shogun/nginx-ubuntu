@@ -174,8 +174,7 @@ else
   warning "Aliases already present in ~/.bashrc, skipping."
 fi
 
-mkdir -p /etc/cloudflared
-curl -fsSL "$GITHUB_RAW/cloudflared/config.yml" -o /etc/cloudflared/config.yml
+curl -fsSL "$GITHUB_RAW/cloudflared/config.yml" -o /tmp/cloudflared-config.yml
 
 success "CloudFlared configuration has been installed."
 
@@ -188,6 +187,9 @@ cloudflared tunnel login
 cloudflared tunnel create "$tunnelName"
 
 TUNNEL_ID=$(cloudflared tunnel list | grep "$tunnelName" | awk '{print $1}')
+cp /tmp/cloudflared-config.yml /etc/cloudflared/config.yml
+rm /tmp/cloudflared-config.yml
+mkdir -p /etc/cloudflared
 sed -i "s|{{TUNNEL_NAME}}|$tunnelName|g" /etc/cloudflared/config.yml
 sed -i "s|{{TUNNEL_ID}}|$TUNNEL_ID|g" /etc/cloudflared/config.yml
 

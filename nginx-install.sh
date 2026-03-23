@@ -132,7 +132,7 @@ for script in create-website disable-website enable-website remove-website; do
 done
 
 mkdir -p /etc/nginx/templates
-for template in nginx-php nginx-dotnet nginx-vue; do
+for template in nginx-php nginx-dotnet nginx-vue dotnet-app.service; do
     curl -fsSL "$GITHUB_RAW/templates/$template.template" -o /etc/nginx/templates/$template.template
     success "$template.template has been installed."
 done

@@ -29,7 +29,7 @@ if ! echo "$DOMAIN" | grep -qP '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.
 fi
 
 # --- Checking if domain or domain config already exists. ---
-[[ -d "/var/www/$DOMAIN" ]]               && error "Directory /var/www/$DOMAIN already exists."
+[[ -d "/var/www/$DOMAIN" ]] && error "Directory /var/www/$DOMAIN already exists."
 [[ -f "/etc/nginx/conf.d/$DOMAIN.conf" ]] && error "NGINX config for $DOMAIN already exists."
 
 # --- Checking if NGINX and CloudFlared are installed. ---
@@ -91,11 +91,17 @@ fi
 
 # --- Options for ASP.NET websites. ---
 DOTNET_PORT=""
+DOTNET_ASSEMBLY=""
 if [[ "$SITE_TYPE" == "2" ]]; then
     echo ""
     read -rp "Which localhost port is your ASP.NET app running on? [default: 5000]: " DOTNET_PORT
     DOTNET_PORT="${DOTNET_PORT:-5000}"
     success "Using port $DOTNET_PORT"
+
+    echo ""
+    read -rp "What is the name of your ASP.NET assembly (e.g. MyProject): " DOTNET_ASSEMBLY
+    [[ -z "$DOTNET_ASSEMBLY" ]] && error "You did not provide an assembly name."
+    success "Using assembly $DOTNET_ASSEMBLY"
 fi
 
 # --- Confirmation for www. ---
@@ -114,12 +120,14 @@ echo -e "${BOLD}Summary${NC}"
 echo "  Domain       : $DOMAIN"
 [[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && echo "  Also covers  : www.$DOMAIN"
 echo "  Type         : $SITE_LABEL"
-[[ -n "$PHP_VERSION" ]]  && echo "  PHP version  : $PHP_VERSION"
-[[ -n "$DOTNET_PORT" ]]  && echo "  .NET port    : $DOTNET_PORT"
+[[ -n "$PHP_VERSION" ]]     && echo "  PHP version  : $PHP_VERSION"
+[[ -n "$DOTNET_PORT" ]]     && echo "  .NET port    : $DOTNET_PORT"
+[[ -n "$DOTNET_ASSEMBLY" ]] && echo "  .NET assembly: $DOTNET_ASSEMBLY"
 echo "  Tunnel       : $TUNNEL_NAME"
 echo "  Webroot      : /var/www/$DOMAIN/public"
 echo "  Logs         : /var/www/$DOMAIN/logs"
 echo "  NGINX config : /etc/nginx/conf.d/$DOMAIN.conf"
+[[ "$SITE_TYPE" == "2" ]] && echo "  Service      : /etc/systemd/system/$DOMAIN.service"
 echo ""
 read -rp "Proceed? [Y/n] " CONFIRM
 CONFIRM="${CONFIRM:-Y}"
@@ -128,7 +136,7 @@ CONFIRM="${CONFIRM:-Y}"
 # --- Create directory structure. ---
 info "Creating directory structure..."
 
-mkdir -p "/var/www/$DOMAIN"/{public,logs}
+mkdir -p "/var/www/$DOMAIN"/{public,logs,app}
 chown -R www-data:www-data "/var/www/$DOMAIN"
 chmod -R 755 "/var/www/$DOMAIN"
 
@@ -142,7 +150,7 @@ EOF
     chown www-data:www-data "/var/www/$DOMAIN/public/index.php" ;;
 
     2) cat > "/var/www/$DOMAIN/public/index.html" <<EOF
-<!-- Placeholder — deploy your ASP.NET app to this server and point NGINX to its port. -->
+<!-- Placeholder — deploy your ASP.NET app to /var/www/$DOMAIN/app/ -->
 <h1>$DOMAIN — ASP.NET</h1>
 EOF
     chown www-data:www-data "/var/www/$DOMAIN/public/index.html" ;;
@@ -172,17 +180,36 @@ fi
 
 success "Config written to $NGINX_CONF"
 
+# --- Create systemd service for ASP.NET. ---
+if [[ "$SITE_TYPE" == "2" ]]; then
+    info "Creating systemd service..."
+
+    SERVICE_TEMPLATE="/etc/nginx/templates/dotnet-app.service.template"
+    [[ ! -f "$SERVICE_TEMPLATE" ]] && error "Service template not found at $SERVICE_TEMPLATE."
+
+    sed \
+        -e "s|{{DOMAIN}}|$DOMAIN|g" \
+        -e "s|{{ASSEMBLY}}|$DOTNET_ASSEMBLY|g" \
+        -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
+        "$SERVICE_TEMPLATE" > "/etc/systemd/system/$DOMAIN.service"
+
+    systemctl daemon-reload
+    systemctl enable "$DOMAIN"
+    success "Systemd service created and enabled."
+    warning "Start the service once your app is deployed: systemctl start $DOMAIN"
+fi
+
 # --- Test and reload NGINX. ---
 info "Testing NGINX config..."
 
 nginx -t || {
     warning "NGINX test failed — rolling back."
     rm -f "$NGINX_CONF"
+    [[ "$SITE_TYPE" == "2" ]] && rm -f "/etc/systemd/system/$DOMAIN.service"
     error "Fix the config at $NGINX_CONF then re-enable manually."
 }
 
 nginx -s reload
-
 success "NGINX reloaded."
 
 # --- Route domain through CloudFlare tunnel. ---
@@ -203,5 +230,7 @@ echo "  Config   → /etc/nginx/conf.d/$DOMAIN.conf"
 echo "  Type     → $SITE_LABEL"
 [[ -n "$PHP_VERSION" ]] && echo "  PHP      → $PHP_VERSION"
 [[ -n "$DOTNET_PORT" ]] && echo "  Port     → $DOTNET_PORT"
+[[ -n "$DOTNET_ASSEMBLY" ]] && echo "  Assembly → $DOTNET_ASSEMBLY"
+[[ "$SITE_TYPE" == "2" ]] && echo "  Service  → /etc/systemd/system/$DOMAIN.service"
 echo "  Tunnel   → $TUNNEL_NAME"
 echo ""

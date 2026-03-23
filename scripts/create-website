@@ -205,6 +205,7 @@ info "Testing NGINX config..."
 nginx -t || {
     warning "NGINX test failed — rolling back."
     rm -f "$NGINX_CONF"
+    rm -rf "/var/www/$DOMAIN"
     [[ "$SITE_TYPE" == "2" ]] && rm -f "/etc/systemd/system/$DOMAIN.service"
     error "Fix the config at $NGINX_CONF then re-enable manually."
 }

@@ -52,7 +52,11 @@ if [[ "$FORCE" == false ]]; then
   [[ -f "$NGINX_CONF_DISABLED" ]] && echo "    NGINX config : /etc/nginx/conf.d/$DOMAIN.conf.disabled"
   [[ -d "/var/www/$DOMAIN" ]]     && echo "    Webroot      : /var/www/$DOMAIN (all files)"
   [[ -f "/etc/systemd/system/$DOMAIN.service" ]] && echo "    Service      : /etc/systemd/system/$DOMAIN.service"
-  [[ -n "$TUNNEL_NAME" ]]         && echo "    Tunnel DNS   : $DOMAIN and www.$DOMAIN records"
+  DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
+  if [[ -n "$TUNNEL_NAME" ]]; then
+    echo "    Tunnel DNS   : $DOMAIN CNAME record"
+    [[ "$DOT_COUNT" -eq 1 ]] && echo "    Tunnel DNS   : www.$DOMAIN CNAME record"
+  fi
   echo ""
   warning "This cannot be undone. Make sure you have a backup if needed."
   echo ""
@@ -97,15 +101,12 @@ if [[ -d "/var/www/$DOMAIN" ]]; then
   success "Webroot removed."
 fi
 
-# --- Remove CloudFlare DNS tunnel. ---
-if [[ -n "$TUNNEL_NAME" ]]; then
-  info "Removing Cloudflare Tunnel DNS records..."
-  cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$DOMAIN" 2>/dev/null || \
-    warning "Could not remove DNS record for $DOMAIN — remove it manually in Cloudflare dashboard."
-  cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "www.$DOMAIN" 2>/dev/null || \
-    warning "Could not remove DNS record for www.$DOMAIN — remove it manually in Cloudflare dashboard."
-  success "Tunnel DNS records removed."
-fi
+# --- Remind user to remove CloudFlare DNS records manually. ---
+DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
+echo ""
+warning "Remember to manually delete the DNS record(s) in your Cloudflare dashboard:"
+warning "  → CNAME record for: $DOMAIN"
+[[ "$DOT_COUNT" -eq 1 ]] && warning "  → CNAME record for: www.$DOMAIN"
 
 # --- Script execution summary. ---
 echo ""

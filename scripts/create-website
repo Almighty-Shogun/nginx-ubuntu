@@ -19,13 +19,30 @@ TEMPLATES_PATH="/etc/nginx/templates"
 
 # --- Check if script is executed as sudo with the correct arguments. ---
 [[ $EUID -ne 0 ]] && error "Run this script with sudo."
-[[ $# -ne 1 ]] && error "Usage: sudo create-website <domain.com>"
+[[ $# -lt 1 ]] && error "Usage: sudo create-website <domain.com> [--type=php|dotnet|vue|html] [--php-version=8.3] [--port=5000] [--assembly=MyProject]"
 
 DOMAIN="$1"
+shift
+
+# --- Parse optional arguments. ---
+SITE_TYPE_ARG=""
+PHP_VERSION_ARG=""
+DOTNET_PORT_ARG=""
+DOTNET_ASSEMBLY_ARG=""
+
+for arg in "$@"; do
+  case $arg in
+    --type=*) SITE_TYPE_ARG="${arg#*=}" ;;
+    --php-version=*) PHP_VERSION_ARG="${arg#*=}" ;;
+    --port=*) DOTNET_PORT_ARG="${arg#*=}" ;;
+    --assembly=*) DOTNET_ASSEMBLY_ARG="${arg#*=}" ;;
+    *) error "Unknown argument: $arg" ;;
+  esac
+done
 
 # --- Checking if the domain is a valid domain name. ---
 if ! echo "$DOMAIN" | grep -qP '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$'; then
-    error "\"$DOMAIN\" doesn't look like a valid domain name."
+  error "\"$DOMAIN\" doesn't look like a valid domain name."
 fi
 
 # --- Checking if domain or domain config already exists. ---
@@ -34,26 +51,40 @@ fi
 
 # --- Checking if NGINX and CloudFlared are installed. ---
 command -v nginx &>/dev/null || error "NGINX is not installed."
-command -v cloudflared &>/dev/null || error "cloudflared is not installed."
+command -v cloudflared &>/dev/null || error "CloudFlared is not installed."
 
 # --- Select website type. ---
-echo ""
-ask "What type of site is this?"
-echo ""
-echo "  [1] PHP"
-echo "  [2] ASP.NET"
-echo "  [3] Vue"
-echo ""
-read -rp "Enter number [1-3]: " SITE_TYPE
+SITE_TYPE=""
+if [[ -n "$SITE_TYPE_ARG" ]]; then
+  case $SITE_TYPE_ARG in
+    php) SITE_TYPE="1" ;;
+    dotnet) SITE_TYPE="2" ;;
+    vue) SITE_TYPE="3" ;;
+    html) SITE_TYPE="4" ;;
+    *) error "Invalid --type value. Use php, dotnet, vue or html." ;;
+  esac
+else
+  echo ""
+  ask "What type of site is this?"
+  echo ""
+  echo "  [1] PHP"
+  echo "  [2] ASP.NET"
+  echo "  [3] Vue"
+  echo "  [4] HTML"
+  echo ""
+  read -rp "Enter number [1-4]: " SITE_TYPE
+fi
 
 case $SITE_TYPE in
-    1) SITE_LABEL="PHP"
-       TEMPLATE_PATH="$TEMPLATES_PATH/nginx-php.template" ;;
-    2) SITE_LABEL="ASP.NET"
-       TEMPLATE_PATH="$TEMPLATES_PATH/nginx-dotnet.template" ;;
-    3) SITE_LABEL="Vue"
-       TEMPLATE_PATH="$TEMPLATES_PATH/nginx-vue.template" ;;
-    *) error "Invalid choice." ;;
+  1) SITE_LABEL="PHP"
+    TEMPLATE_PATH="$TEMPLATES_PATH/nginx-php.template" ;;
+  2) SITE_LABEL="ASP.NET"
+    TEMPLATE_PATH="$TEMPLATES_PATH/nginx-dotnet.template" ;;
+  3) SITE_LABEL="Vue"
+    TEMPLATE_PATH="$TEMPLATES_PATH/nginx-vue.template" ;;
+  4) SITE_LABEL="HTML"
+    TEMPLATE_PATH="$TEMPLATES_PATH/nginx-html.template" ;;
+  *) error "Invalid choice." ;;
 esac
 
 # --- Check if the template exists. ---
@@ -62,16 +93,20 @@ esac
 # --- Options for PHP websites. ---
 PHP_VERSION=""
 if [[ "$SITE_TYPE" == "1" ]]; then
+  if [[ -n "$PHP_VERSION_ARG" ]]; then
+    [[ ! -S "/run/php/php${PHP_VERSION_ARG}-fpm.sock" ]] && error "PHP ${PHP_VERSION_ARG}-FPM is not running."
+    PHP_VERSION="$PHP_VERSION_ARG"
+    success "Using PHP $PHP_VERSION"
+  else
     echo ""
     ask "Which PHP version should this site use?"
     echo ""
 
     AVAILABLE_PHP=()
-    for ver in 8.3 8.4 8.5; do
-        if [[ -S "/run/php/php${ver}-fpm.sock" ]]; then
-            AVAILABLE_PHP+=("$ver")
-            echo "  [${#AVAILABLE_PHP[@]}] PHP $ver"
-        fi
+    for sock in /run/php/php*-fpm.sock; do
+      ver=$(echo "$sock" | grep -oP '\d+\.\d+')
+      AVAILABLE_PHP+=("$ver")
+      echo "  [${#AVAILABLE_PHP[@]}] PHP $ver"
     done
 
     [[ ${#AVAILABLE_PHP[@]} -eq 0 ]] && error "No PHP-FPM versions are running."
@@ -79,46 +114,57 @@ if [[ "$SITE_TYPE" == "1" ]]; then
     echo ""
     read -rp "Enter number [1-${#AVAILABLE_PHP[@]}]: " PHP_CHOICE
 
-    if ! [[ "$PHP_CHOICE" =~ ^[0-9]+$ ]] || \
-       [[ "$PHP_CHOICE" -lt 1 ]] || \
-       [[ "$PHP_CHOICE" -gt ${#AVAILABLE_PHP[@]} ]]; then
-        error "Invalid choice."
+    if ! [[ "$PHP_CHOICE" =~ ^[0-9]+$ ]] || [[ "$PHP_CHOICE" -lt 1 ]] || [[ "$PHP_CHOICE" -gt ${#AVAILABLE_PHP[@]} ]]; then
+      error "Invalid choice."
     fi
 
     PHP_VERSION="${AVAILABLE_PHP[$((PHP_CHOICE - 1))]}"
     success "Selected PHP $PHP_VERSION"
+  fi
 fi
 
 # --- Options for ASP.NET websites. ---
 DOTNET_PORT=""
 DOTNET_ASSEMBLY=""
 if [[ "$SITE_TYPE" == "2" ]]; then
+  if [[ -n "$DOTNET_PORT_ARG" ]]; then
+    DOTNET_PORT="$DOTNET_PORT_ARG"
+    success "Using port $DOTNET_PORT"
+  else
     echo ""
     read -rp "Which localhost port is your ASP.NET app running on? [default: 5000]: " DOTNET_PORT
     DOTNET_PORT="${DOTNET_PORT:-5000}"
     success "Using port $DOTNET_PORT"
+  fi
 
+  if [[ -n "$DOTNET_ASSEMBLY_ARG" ]]; then
+    DOTNET_ASSEMBLY="$DOTNET_ASSEMBLY_ARG"
+    success "Using assembly $DOTNET_ASSEMBLY"
+  else
     echo ""
     read -rp "What is the name of your ASP.NET assembly (e.g. MyProject): " DOTNET_ASSEMBLY
     [[ -z "$DOTNET_ASSEMBLY" ]] && error "You did not provide an assembly name."
     success "Using assembly $DOTNET_ASSEMBLY"
+  fi
 fi
 
-# --- Confirmation for www. ---
-echo ""
-ask "Should this site also cover www.$DOMAIN? [Y/n]"
-read -rp "> " INCLUDE_WWW
-INCLUDE_WWW="${INCLUDE_WWW:-Y}"
+# --- Determine www coverage. ---
+DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
+if [[ "$DOT_COUNT" -gt 1 ]]; then
+  INCLUDE_WWW="N"
+else
+  INCLUDE_WWW="Y"
+fi
 
 # --- CloudFlared tunnel check. ---
-TUNNEL_NAME=$(cloudflared tunnel list 2>/dev/null | awk 'NR==2 {print $2}')
-[[ -z "$TUNNEL_NAME" ]] && error "No Cloudflare Tunnel found. Make sure cloudflared is set up."
+TUNNEL_NAME=$(cloudflared tunnel list 2>/dev/null | awk 'NR==3 {print $2}')
+[[ -z "$TUNNEL_NAME" ]] && error "No CloudFlare Tunnel found. Make sure CloudFlared is set up."
 
 # --- Ask for domain confirmation. ---
 echo ""
 echo -e "${BOLD}Summary${NC}"
 echo "  Domain       : $DOMAIN"
-[[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && echo "  Also covers  : www.$DOMAIN"
+[[ "$INCLUDE_WWW" == "Y" ]] && echo "  Also covers  : www.$DOMAIN"
 echo "  Type         : $SITE_LABEL"
 [[ -n "$PHP_VERSION" ]]     && echo "  PHP version  : $PHP_VERSION"
 [[ -n "$DOTNET_PORT" ]]     && echo "  .NET port    : $DOTNET_PORT"
@@ -136,29 +182,28 @@ CONFIRM="${CONFIRM:-Y}"
 # --- Create directory structure. ---
 info "Creating directory structure..."
 
-mkdir -p "/var/www/$DOMAIN"/{public,logs,app}
+# Only ASP.NET needs the app directory
+if [[ "$SITE_TYPE" == "2" ]]; then
+  mkdir -p "/var/www/$DOMAIN"/{public,logs,app}
+else
+  mkdir -p "/var/www/$DOMAIN"/{public,logs}
+fi
+
 chown -R www-data:www-data "/var/www/$DOMAIN"
 chmod -R 755 "/var/www/$DOMAIN"
 
 case $SITE_TYPE in
-    1) cat > "/var/www/$DOMAIN/public/index.php" <<EOF
-<?php
-// Placeholder — replace with your application files.
-echo '<h1>$DOMAIN is live</h1>';
-echo '<p>PHP ' . phpversion() . '</p>';
-EOF
+  1)
+    sed "s/{{DOMAIN}}/$DOMAIN/g" "$TEMPLATES_PATH/php_index.template" > "/var/www/$DOMAIN/public/index.php"
     chown www-data:www-data "/var/www/$DOMAIN/public/index.php" ;;
-
-    2) cat > "/var/www/$DOMAIN/public/index.html" <<EOF
-<!-- Placeholder — deploy your ASP.NET app to /var/www/$DOMAIN/app/ -->
-<h1>$DOMAIN — ASP.NET</h1>
-EOF
+  2)
+    sed "s/{{DOMAIN}}/$DOMAIN/g" "$TEMPLATES_PATH/asp_index.template" > "/var/www/$DOMAIN/public/index.html"
     chown www-data:www-data "/var/www/$DOMAIN/public/index.html" ;;
-
-    3) cat > "/var/www/$DOMAIN/public/index.html" <<EOF
-<!-- Placeholder — run 'npm run build' and copy your dist/ folder contents here. -->
-<h1>$DOMAIN — Vue</h1>
-EOF
+  3)
+    sed "s/{{DOMAIN}}/$DOMAIN/g" "$TEMPLATES_PATH/vue_index.template" > "/var/www/$DOMAIN/public/index.html"
+    chown www-data:www-data "/var/www/$DOMAIN/public/index.html" ;;
+  4)
+    sed "s/{{DOMAIN}}/$DOMAIN/g" "$TEMPLATES_PATH/html_index.template" > "/var/www/$DOMAIN/public/index.html"
     chown www-data:www-data "/var/www/$DOMAIN/public/index.html" ;;
 esac
 
@@ -169,45 +214,44 @@ info "Generating NGINX config..."
 
 NGINX_CONF="/etc/nginx/conf.d/$DOMAIN.conf"
 sed \
-    -e "s|{{DOMAIN}}|$DOMAIN|g" \
-    -e "s|{{PHP_VERSION}}|$PHP_VERSION|g" \
-    -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
-    "$TEMPLATE_PATH" > "$NGINX_CONF"
+  -e "s|{{DOMAIN}}|$DOMAIN|g" \
+  -e "s|{{PHP_VERSION}}|$PHP_VERSION|g" \
+  -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
+  "$TEMPLATE_PATH" > "$NGINX_CONF"
 
-if [[ ! "$INCLUDE_WWW" =~ ^[Yy]$ ]]; then
-    sed -i "s| www\.$DOMAIN||g" "$NGINX_CONF"
+if [[ "$INCLUDE_WWW" == "N" ]]; then
+  sed -i "s| www\.$DOMAIN||g" "$NGINX_CONF"
 fi
 
 success "Config written to $NGINX_CONF"
 
 # --- Create systemd service for ASP.NET. ---
 if [[ "$SITE_TYPE" == "2" ]]; then
-    info "Creating systemd service..."
+  info "Creating systemd service..."
 
-    SERVICE_TEMPLATE="/etc/nginx/templates/dotnet-app.service.template"
-    [[ ! -f "$SERVICE_TEMPLATE" ]] && error "Service template not found at $SERVICE_TEMPLATE."
+  SERVICE_TEMPLATE="$TEMPLATES_PATH/dotnet-app.service.template"
+  [[ ! -f "$SERVICE_TEMPLATE" ]] && error "Service template not found at $SERVICE_TEMPLATE."
 
-    sed \
-        -e "s|{{DOMAIN}}|$DOMAIN|g" \
-        -e "s|{{ASSEMBLY}}|$DOTNET_ASSEMBLY|g" \
-        -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
-        "$SERVICE_TEMPLATE" > "/etc/systemd/system/$DOMAIN.service"
+  sed \
+    -e "s|{{DOMAIN}}|$DOMAIN|g" \
+    -e "s|{{ASSEMBLY}}|$DOTNET_ASSEMBLY|g" \
+    -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
+    "$SERVICE_TEMPLATE" > "/etc/systemd/system/$DOMAIN.service"
 
-    systemctl daemon-reload
-    systemctl enable "$DOMAIN"
-    success "Systemd service created and enabled."
-    warning "Start the service once your app is deployed: systemctl start $DOMAIN"
+  systemctl daemon-reload
+  systemctl enable "$DOMAIN"
+
+  success "Systemd service created and enabled."
 fi
 
 # --- Test and reload NGINX. ---
 info "Testing NGINX config..."
-
 nginx -t || {
-    warning "NGINX test failed — rolling back."
-    rm -f "$NGINX_CONF"
-    rm -rf "/var/www/$DOMAIN"
-    [[ "$SITE_TYPE" == "2" ]] && rm -f "/etc/systemd/system/$DOMAIN.service"
-    error "Fix the config at $NGINX_CONF then re-enable manually."
+  warning "NGINX test failed — rolling back."
+  rm -f "$NGINX_CONF"
+  rm -rf "/var/www/$DOMAIN"
+  [[ "$SITE_TYPE" == "2" ]] && rm -f "/etc/systemd/system/$DOMAIN.service"
+  error "Fix the config at $NGINX_CONF then re-enable manually."
 }
 
 nginx -s reload
@@ -217,7 +261,7 @@ success "NGINX reloaded."
 info "Routing $DOMAIN through Cloudflare Tunnel..."
 
 cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$DOMAIN"
-[[ "$INCLUDE_WWW" =~ ^[Yy]$ ]] && cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "www.$DOMAIN"
+[[ "$INCLUDE_WWW" == "Y" ]] && cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "www.$DOMAIN"
 
 success "DNS routed through tunnel."
 
@@ -229,9 +273,17 @@ echo "  Webroot  → /var/www/$DOMAIN/public"
 echo "  Logs     → /var/www/$DOMAIN/logs"
 echo "  Config   → /etc/nginx/conf.d/$DOMAIN.conf"
 echo "  Type     → $SITE_LABEL"
-[[ -n "$PHP_VERSION" ]] && echo "  PHP      → $PHP_VERSION"
-[[ -n "$DOTNET_PORT" ]] && echo "  Port     → $DOTNET_PORT"
+[[ -n "$PHP_VERSION" ]]     && echo "  PHP      → $PHP_VERSION"
+[[ -n "$DOTNET_PORT" ]]     && echo "  Port     → $DOTNET_PORT"
 [[ -n "$DOTNET_ASSEMBLY" ]] && echo "  Assembly → $DOTNET_ASSEMBLY"
-[[ "$SITE_TYPE" == "2" ]] && echo "  Service  → /etc/systemd/system/$DOMAIN.service"
+[[ "$SITE_TYPE" == "2" ]]   && echo "  Service  → /etc/systemd/system/$DOMAIN.service"
 echo "  Tunnel   → $TUNNEL_NAME"
 echo ""
+
+if [[ "$SITE_TYPE" == "2" ]]; then
+  warning "Start the service once your app is deployed: systemctl start $DOMAIN"
+fi
+
+if [[ "$INCLUDE_WWW" == "Y" ]]; then
+  warning "Don't forget to add a www → $DOMAIN redirect rule in your CloudFlare dashboard."
+fi

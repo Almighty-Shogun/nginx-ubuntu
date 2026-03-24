@@ -1,0 +1,3 @@
+<?php
+echo '<h1>${DOMAIN} is live</h1>';
+echo '<p>PHP ' . phpversion() . '</p>';

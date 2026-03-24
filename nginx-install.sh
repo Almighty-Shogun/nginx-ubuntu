@@ -16,24 +16,50 @@ error()   { echo -e "${RED}[ERROR]${NC}  $*" >&2; exit 1; }
 # --- Checking if script was called from sudo. ---
 [[ $EUID -ne 0 ]] && error "Run this script with sudo."
 
+# --- Parse optional arguments. ---
+INSTALL_MARIADB=true
+INSTALL_POSTGRESQL=true
+INSTALL_DOTNET=true
+ADD_ALIASES=true
+SKIP_MARIADB_PASSWORD=false
+SKIP_POSTGRESQL_PASSWORD=false
+PHP_VERSIONS="8.3 8.4 8.5"
+
+for arg in "$@"; do
+  case $arg in
+    --no-mariadb) INSTALL_MARIADB=false ;;
+    --no-postgresql) INSTALL_POSTGRESQL=false ;;
+    --no-dotnet) INSTALL_DOTNET=false ;;
+    --no-aliases) ADD_ALIASES=false ;;
+    --skip-mariadb-password) SKIP_MARIADB_PASSWORD=true ;;
+    --skip-postgresql-password) SKIP_POSTGRESQL_PASSWORD=true ;;
+    --php-versions=*) PHP_VERSIONS="${arg#*=}" PHP_VERSIONS="${PHP_VERSIONS//,/ }" ;;
+    *) error "Unknown argument: $arg" ;;
+  esac
+done
+
 # --- General questions. ---
 echo ""
 info "A few questions before we start the configuration..."
 echo ""
 
-while true; do
-  read -rsp "What is the password for MariaDB?: " mariaDbPassword
-  echo ""
-  [[ -n "$mariaDbPassword" ]] && break
-  echo "You did not provide a password. Please try again"
-done
+if [[ "$INSTALL_MARIADB" == true ]] && [[ "$SKIP_MARIADB_PASSWORD" == false ]]; then
+  while true; do
+    read -rsp "What is the password for MariaDB?: " mariaDbPassword
+    echo ""
+    [[ -n "$mariaDbPassword" ]] && break
+    echo "You did not provide a password. Please try again"
+  done
+fi
 
-while true; do
-  read -rsp "What is the password for PostgreSQL?: " postDbPassword
-  echo ""
-  [[ -n "$postDbPassword" ]] && break
-  echo "You did not provide a password. Please try again"
-done
+if [[ "$INSTALL_POSTGRESQL" == true ]] && [[ "$SKIP_POSTGRESQL_PASSWORD" == false ]]; then
+  while true; do
+    read -rsp "What is the password for PostgreSQL?: " postDbPassword
+    echo ""
+    [[ -n "$postDbPassword" ]] && break
+    echo "You did not provide a password. Please try again"
+  done
+fi
 
 while true; do
   read -rp "Enter a name for your CloudFlare tunnel (e.g. my-server): " tunnelName
@@ -63,18 +89,22 @@ systemctl enable --now nginx
 success "NGINX has been installed and is running."
 
 # --- Installing MariaDB. ---
-info "Installing MariaDB..."
-apt install mariadb-server -y
-systemctl enable --now mariadb
-success "MariaDB has been installed and is running."
+if [[ "$INSTALL_MARIADB" == true ]]; then
+  info "Installing MariaDB..."
+  apt install mariadb-server -y
+  systemctl enable --now mariadb
+  success "MariaDB has been installed and is running."
+fi
 
 # --- Installing PostgreSQL. ---
-info "Installing PostgreSQL..."
-apt install -y postgresql-common
-/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
-apt install postgresql-17 -y
-systemctl enable --now postgresql
-success "PostgreSQL has been installed and is running."
+if [[ "$INSTALL_POSTGRESQL" == true ]]; then
+  info "Installing PostgreSQL..."
+  apt install -y postgresql-common
+  /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+  apt install postgresql-17 -y
+  systemctl enable --now postgresql
+  success "PostgreSQL has been installed and is running."
+fi
 
 # --- Installing PHP version(s). ---
 info "Adding PHP repository..."
@@ -82,23 +112,23 @@ add-apt-repository ppa:ondrej/php -y
 apt update
 apt upgrade -y
 
-for ver in 8.3 8.4 8.5; do
-    info "Installing PHP ${ver} and extensions..."
+for ver in $PHP_VERSIONS; do
+  info "Installing PHP ${ver} and extensions..."
 
-    BASE_EXTENSIONS="php${ver}-fpm php${ver}-cli php${ver}-mbstring php${ver}-xml php${ver}-curl php${ver}-zip php${ver}-bcmath php${ver}-intl php${ver}-gd php${ver}-mysql php${ver}-pgsql php${ver}-sqlite3 php${ver}-redis php${ver}-soap"
+  BASE_EXTENSIONS="php${ver}-fpm php${ver}-cli php${ver}-mbstring php${ver}-xml php${ver}-curl php${ver}-zip php${ver}-bcmath php${ver}-intl php${ver}-gd php${ver}-mysql php${ver}-pgsql php${ver}-sqlite3 php${ver}-redis php${ver}-soap"
 
-    if [[ "$ver" != "8.5" ]]; then
-        BASE_EXTENSIONS="$BASE_EXTENSIONS php${ver}-opcache"
-    fi
+  if [[ "$ver" != "8.5" ]]; then
+    BASE_EXTENSIONS="$BASE_EXTENSIONS php${ver}-opcache"
+  fi
 
-    apt install -y openssl $BASE_EXTENSIONS
+  apt install -y openssl $BASE_EXTENSIONS
 
-    sed -i 's/listen.owner = www-data/listen.owner = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
-    sed -i 's/listen.group = www-data/listen.group = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
+  sed -i 's/listen.owner = www-data/listen.owner = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
+  sed -i 's/listen.group = www-data/listen.group = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
 
-    systemctl enable --now php${ver}-fpm
+  systemctl enable --now php${ver}-fpm
 
-    success "PHP ${ver} has been installed and is running."
+  success "PHP ${ver} has been installed and is running."
 done
 
 # --- Installing Composer. ---
@@ -107,9 +137,11 @@ curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/b
 success "Composer has been installed."
 
 # --- Installing .NET 10 SDK. ---
-info "Installing .NET SDK 10..."
-apt install dotnet-sdk-10.0 -y
-success ".NET SDK has been installed."
+if [[ "$INSTALL_DOTNET" == true ]]; then
+  info "Installing .NET SDK 10..."
+  apt install dotnet-sdk-10.0 -y
+  success ".NET SDK has been installed."
+fi
 
 # --- Installing CloudFlare tunnel. ---
 info "Installing Cloudflared..."
@@ -126,32 +158,34 @@ info "Downloading files from GitHub..."
 GITHUB_RAW="https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main"
 
 for script in create-website disable-website enable-website remove-website; do
-    curl -fsSL "$GITHUB_RAW/scripts/$script" -o /usr/local/bin/$script
-    chmod +x /usr/local/bin/$script
-    success "$script has been installed."
+  curl -fsSL "$GITHUB_RAW/scripts/$script" -o /usr/local/bin/$script
+  chmod +x /usr/local/bin/$script
+  success "$script has been installed."
 done
 
 mkdir -p /etc/nginx/templates
-for template in nginx-php nginx-dotnet nginx-vue dotnet-app.service; do
-    curl -fsSL "$GITHUB_RAW/templates/$template.template" -o /etc/nginx/templates/$template.template
-    success "$template.template has been installed."
+for template in nginx-php nginx-dotnet nginx-vue nginx-html dotnet-app.service asp_index php_index vue_index html_index; do
+  curl -fsSL "$GITHUB_RAW/templates/$template.template" -o /etc/nginx/templates/$template.template
+  success "$template.template has been installed."
 done
 
 mkdir -p /etc/nginx/snippets
 for conf in cloudflare-real-ip security-headers fastcgi-php; do
-    curl -fsSL "$GITHUB_RAW/snippets/$conf.conf" -o /etc/nginx/snippets/$conf.conf
-    success "$conf.conf has been installed."
+  curl -fsSL "$GITHUB_RAW/snippets/$conf.conf" -o /etc/nginx/snippets/$conf.conf
+  success "$conf.conf has been installed."
 done
 
-curl -fsSL "$GITHUB_RAW/aliases" -o /tmp/aliases
+if [[ "$ADD_ALIASES" == true ]]; then
+  curl -fsSL "$GITHUB_RAW/aliases" -o /tmp/aliases
 
-if ! grep -q "# Custom aliases" ~/.bashrc; then
+  if ! grep -q "# Custom aliases" ~/.bashrc; then
     echo "" >> ~/.bashrc
     cat /tmp/aliases >> ~/.bashrc
     rm /tmp/aliases
     success "Aliases have been added to ~/.bashrc"
-else
+  else
     warning "Aliases already present in ~/.bashrc, skipping."
+  fi
 fi
 
 curl -fsSL "$GITHUB_RAW/cloudflared/config.yml" -o /tmp/cloudflared-config.yml
@@ -180,32 +214,37 @@ systemctl enable --now cloudflared
 success "Cloudflare Tunnel '$tunnelName' has been created and is running."
 
 # --- MariaDB configuration. ---
-info "Configuring MariaDB..."
-mariadb <<EOF
+if [[ "$INSTALL_MARIADB" == true ]] && [[ "$SKIP_MARIADB_PASSWORD" == false ]]; then
+  info "Configuring MariaDB..."
+  mariadb <<EOF
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$mariaDbPassword';
 FLUSH PRIVILEGES;
 EOF
-systemctl restart mariadb
-success "MariaDB has been configured."
+  systemctl restart mariadb
+  success "MariaDB has been configured."
+fi
 
 # --- PostgreSQL configuration. ---
-info "Configuring PostgreSQL..."
-sudo -u postgres psql -q <<EOF
+if [[ "$INSTALL_POSTGRESQL" == true ]] && [[ "$SKIP_POSTGRESQL_PASSWORD" == false ]]; then
+  info "Configuring PostgreSQL..."
+  sudo -u postgres psql -q <<EOF
 ALTER USER postgres WITH PASSWORD '$postDbPassword';
 \q
 EOF
+
 systemctl restart postgresql
 success "PostgreSQL has been configured."
+fi
 
 # --- Script execution summary. ---
 echo ""
 echo -e "${GREEN}Setup complete. Summary:${NC}"
 echo "  NGINX       → $(systemctl is-active nginx)"
-echo "  MariaDB     → $(systemctl is-active mariadb)"
-echo "  PostgreSQL  → $(systemctl is-active postgresql)"
-echo "  cloudflared → $(systemctl is-active cloudflared)"
+[[ "$INSTALL_MARIADB" == true ]]    && echo "  MariaDB     → $(systemctl is-active mariadb)"
+[[ "$INSTALL_POSTGRESQL" == true ]] && echo "  PostgreSQL  → $(systemctl is-active postgresql)"
+echo "  CloudFlared → $(systemctl is-active cloudflared)"
 
-for ver in 8.3 8.4 8.5; do
+for ver in $PHP_VERSIONS; do
     echo "  PHP ${ver}-FPM → $(systemctl is-active php${ver}-fpm)"
 done
 
@@ -214,4 +253,7 @@ echo ""
 warning "DO NOT FORGET TO DO THIS AFTERWARDS:"
 warning "1. Make sure CloudFlare tunnel has been configured properly."
 warning "2. Set CloudFlare SSL mode to Full (strict) in your Cloudflare dashboard"
-warning "3. Run: source ~/.bashrc"
+
+if [[ "$ADD_ALIASES" == true ]]; then
+    warning "3. Run: source ~/.bashrc"
+fi

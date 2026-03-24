@@ -27,8 +27,8 @@ NGINX_CONF_DISABLED="/etc/nginx/conf.d/$DOMAIN.conf.disabled"
 
 # --- Checking if the website is already disabled. ---
 if [[ -f "$NGINX_CONF_DISABLED" ]]; then
-    warning "$DOMAIN is already disabled."
-    exit 0
+  warning "$DOMAIN is already disabled."
+  exit 0
 fi
 
 # --- Ask for domain confirmation. ---
@@ -44,20 +44,15 @@ CONFIRM="${CONFIRM:-Y}"
 
 # --- Disable the domain by renaming the config. ---
 info "Disabling site..."
-
 mv "$NGINX_CONF" "$NGINX_CONF_DISABLED"
-
 success "Config renamed to $DOMAIN.conf.disabled"
 
 # --- Testing and reloading NGINX. ---
 info "Testing NGINX config..."
-
 nginx -t || error "NGINX config test failed after disabling — check your configs."
 
 info "Reloading NGINX..."
-
 nginx -s reload
-
 success "NGINX reloaded."
 
 # --- Script execution summary. ---

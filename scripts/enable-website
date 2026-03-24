@@ -27,28 +27,24 @@ NGINX_CONF_DISABLED="/etc/nginx/conf.d/$DOMAIN.conf.disabled"
 
 # --- Checking if the domain is already enabled. ---
 if [[ -f "$NGINX_CONF" ]]; then
-    warning "$DOMAIN is already enabled."
-    exit 0
+  warning "$DOMAIN is already enabled."
+  exit 0
 fi
 
 # --- Enable the domain by renaming the config back. ---
 info "Enabling site..."
-
 mv "$NGINX_CONF_DISABLED" "$NGINX_CONF"
-
 success "Config restored to $DOMAIN.conf"
 
 # --- Testing and reloading NGINX. ---
 info "Testing NGINX config..."
-
 nginx -t || {
-    warning "NGINX config test failed — rolling back."
-    mv "$NGINX_CONF" "$NGINX_CONF_DISABLED"
-    error "Fix the config at $NGINX_CONF_DISABLED then try again."
+  warning "NGINX config test failed — rolling back."
+  mv "$NGINX_CONF" "$NGINX_CONF_DISABLED"
+  error "Fix the config at $NGINX_CONF_DISABLED then try again."
 }
 
 info "Reloading NGINX..."
-
 nginx -s reload
 
 success "NGINX reloaded."

@@ -77,7 +77,7 @@ success "System packages have been updated."
 
 # --- Installing cURL. ---
 info "Installing cURL..."
-apt install curl gnupg2 ca-certificates lsb-release -y
+apt install curl gnupg2 ca-certificates lsb-release software-properties-common -y
 success "cURL has been installed."
 
 # --- Installing NGINX. ---
@@ -234,8 +234,10 @@ success "Cloudflare Tunnel '$tunnelName' has been created and is running."
 # --- MariaDB configuration. ---
 if [[ "$INSTALL_MARIADB" == true ]] && [[ "$SKIP_MARIADB_PASSWORD" == false ]]; then
   info "Configuring MariaDB..."
+  sql_mariadb_password="${mariaDbPassword//\\/\\\\}"
+  sql_mariadb_password="${sql_mariadb_password//\'/\'\'}"
   mariadb <<EOF
-ALTER USER 'root'@'localhost' IDENTIFIED BY '$mariaDbPassword';
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$sql_mariadb_password';
 FLUSH PRIVILEGES;
 EOF
   systemctl restart mariadb
@@ -245,9 +247,9 @@ fi
 # --- PostgreSQL configuration. ---
 if [[ "$INSTALL_POSTGRESQL" == true ]] && [[ "$SKIP_POSTGRESQL_PASSWORD" == false ]]; then
   info "Configuring PostgreSQL..."
+  sql_pg_password="${postDbPassword//\'/\'\'}"
   sudo -u postgres psql -q <<EOF
-ALTER USER postgres WITH PASSWORD '$postDbPassword';
-\q
+ALTER USER postgres WITH PASSWORD '$sql_pg_password';
 EOF
 
   systemctl restart postgresql

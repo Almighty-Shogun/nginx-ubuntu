@@ -21,6 +21,7 @@ INSTALL_MARIADB=true
 INSTALL_POSTGRESQL=true
 INSTALL_DOTNET=true
 ADD_ALIASES=true
+INSTALL_DATABASE_SCRIPTS=true
 SKIP_MARIADB_PASSWORD=false
 SKIP_POSTGRESQL_PASSWORD=false
 PHP_VERSIONS="8.3 8.4 8.5"
@@ -31,6 +32,7 @@ for arg in "$@"; do
     --no-postgresql) INSTALL_POSTGRESQL=false ;;
     --no-dotnet) INSTALL_DOTNET=false ;;
     --no-aliases) ADD_ALIASES=false ;;
+    --no-database-scripts) INSTALL_DATABASE_SCRIPTS=false ;;
     --skip-mariadb-password) SKIP_MARIADB_PASSWORD=true ;;
     --skip-postgresql-password) SKIP_POSTGRESQL_PASSWORD=true ;;
     --php-versions=*) PHP_VERSIONS="${arg#*=}" PHP_VERSIONS="${PHP_VERSIONS//,/ }" ;;
@@ -157,11 +159,27 @@ info "Downloading files from GitHub..."
 
 GITHUB_RAW="https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/main"
 
-for script in create-website disable-website enable-website remove-website; do
+for script in create-website disable-website enable-website remove-website update-files; do
   curl -fsSL "$GITHUB_RAW/scripts/$script" -o /usr/local/bin/$script
   chmod +x /usr/local/bin/$script
   success "$script has been installed."
 done
+
+if [[ "$INSTALL_MARIADB" == true ]] && [[ "$INSTALL_DATABASE_SCRIPTS" == true ]]; then
+  for script in mariadb-add-user mariadb-remove-user mariadb-update-password; do
+      curl -fsSL "$GITHUB_RAW/scripts/$script" -o /usr/local/bin/$script
+      chmod +x /usr/local/bin/$script
+      success "$script has been installed."
+  done
+fi
+
+if [[ "$INSTALL_POSTGRESQL" == true ]] && [[ "$INSTALL_DATABASE_SCRIPTS" == true ]]; then
+  for script in postgresql-add-user postgresql-remove-user postgresql-update-password; do
+      curl -fsSL "$GITHUB_RAW/scripts/$script" -o /usr/local/bin/$script
+      chmod +x /usr/local/bin/$script
+      success "$script has been installed."
+  done
+fi
 
 mkdir -p /etc/nginx/templates
 for template in nginx-php nginx-dotnet nginx-vue nginx-html dotnet-app.service asp_index php_index vue_index html_index; do
@@ -232,8 +250,8 @@ ALTER USER postgres WITH PASSWORD '$postDbPassword';
 \q
 EOF
 
-systemctl restart postgresql
-success "PostgreSQL has been configured."
+  systemctl restart postgresql
+  success "PostgreSQL has been configured."
 fi
 
 # --- Script execution summary. ---

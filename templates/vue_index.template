@@ -1,1 +1,1 @@
-<h1>${DOMAIN} — Vue</h1>
+<h1>{{DOMAIN}} — Vue</h1>

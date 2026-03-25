@@ -87,6 +87,7 @@ echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx
 apt update
 apt upgrade -y
 apt install nginx -y
+sed -i 's/^user .*/user www-data;/' /etc/nginx/nginx.conf
 systemctl enable --now nginx
 success "NGINX has been installed and is running."
 
@@ -125,8 +126,8 @@ for ver in $PHP_VERSIONS; do
 
   apt install -y openssl $BASE_EXTENSIONS
 
-  sed -i 's/listen.owner = www-data/listen.owner = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
-  sed -i 's/listen.group = www-data/listen.group = nginx/' /etc/php/${ver}/fpm/pool.d/www.conf
+  sed -i 's/listen.owner = .*/listen.owner = www-data/' /etc/php/${ver}/fpm/pool.d/www.conf
+  sed -i 's/listen.group = .*/listen.group = www-data/' /etc/php/${ver}/fpm/pool.d/www.conf
 
   systemctl enable --now php${ver}-fpm
 

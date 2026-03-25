@@ -5,15 +5,15 @@ A personal setup script that installs and configures a production-ready NGINX se
 
 ## What it installs
 
-| Component | Details |
-|---|---|
-| NGINX | Latest version from the official NGINX repository |
+| Component | Details                                                             |
+|---|---------------------------------------------------------------------|
+| NGINX | Latest version from the official NGINX repository                   |
 | MariaDB | Latest stable version, root password configured during installation |
-| PostgreSQL 17 | Root password configured during installation |
-| PHP 8.3, 8.4 and 8.5 | Each with a set of common extensions and PHP-FPM |
-| Composer | Installed globally |
-| .NET SDK 10 | For ASP.NET applications |
-| Cloudflare Tunnel | Installed and configured during installation |
+| PostgreSQL 17 | Root password configured during installation                        |
+| PHP 8.3, 8.4 and 8.5 | Each with a set of common extensions and PHP-FPM                    |
+| Composer | Installed globally                                                  |
+| .NET SDK 10 | For ASP.NET applications                                            |
+| Cloudflare Tunnel | Installed during installation                                       |
 
 ## What it configures
 

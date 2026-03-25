@@ -37,11 +37,6 @@ if [[ ! -f "$NGINX_CONF" ]] && [[ ! -f "$NGINX_CONF_DISABLED" ]]; then
     error "No NGINX config found for $DOMAIN."
 fi
 
-# --- Checking if CloudFlared is installed. ---
-command -v cloudflared &>/dev/null || error "CloudFlared is not installed."
-
-TUNNEL_NAME=$(cloudflared tunnel list 2>/dev/null | awk 'NR==3 {print $2}')
-
 # --- Asking confirmation of domain deletion. ---
 if [[ "$FORCE" == false ]]; then
   echo ""
@@ -52,11 +47,6 @@ if [[ "$FORCE" == false ]]; then
   [[ -f "$NGINX_CONF_DISABLED" ]] && echo "    NGINX config : /etc/nginx/conf.d/$DOMAIN.conf.disabled"
   [[ -d "/var/www/$DOMAIN" ]]     && echo "    Webroot      : /var/www/$DOMAIN (all files)"
   [[ -f "/etc/systemd/system/$DOMAIN.service" ]] && echo "    Service      : /etc/systemd/system/$DOMAIN.service"
-  DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
-  if [[ -n "$TUNNEL_NAME" ]]; then
-    echo "    Tunnel DNS   : $DOMAIN CNAME record"
-    [[ "$DOT_COUNT" -eq 1 ]] && echo "    Tunnel DNS   : www.$DOMAIN CNAME record"
-  fi
   echo ""
   warning "This cannot be undone. Make sure you have a backup if needed."
   echo ""

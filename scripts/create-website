@@ -51,7 +51,6 @@ fi
 
 # --- Checking if NGINX and CloudFlared are installed. ---
 command -v nginx &>/dev/null || error "NGINX is not installed."
-command -v cloudflared &>/dev/null || error "CloudFlared is not installed."
 
 # --- Select website type. ---
 SITE_TYPE=""
@@ -156,10 +155,6 @@ else
   INCLUDE_WWW="Y"
 fi
 
-# --- CloudFlared tunnel check. ---
-TUNNEL_NAME=$(cloudflared tunnel list 2>/dev/null | awk 'NR==3 {print $2}')
-[[ -z "$TUNNEL_NAME" ]] && error "No CloudFlare Tunnel found. Make sure CloudFlared is set up."
-
 # --- Ask for domain confirmation. ---
 echo ""
 echo -e "${BOLD}Summary${NC}"
@@ -257,11 +252,6 @@ nginx -t || {
 nginx -s reload
 success "NGINX reloaded."
 
-# --- Route domain through CloudFlare tunnel. ---
-info "Routing $DOMAIN through Cloudflare Tunnel..."
-
-success "DNS routed through tunnel."
-
 # --- Script execution summary. ---
 echo ""
 echo -e "${GREEN}${BOLD}$DOMAIN is live!${NC}"
@@ -274,7 +264,6 @@ echo "  Type     → $SITE_LABEL"
 [[ -n "$DOTNET_PORT" ]]     && echo "  Port     → $DOTNET_PORT"
 [[ -n "$DOTNET_ASSEMBLY" ]] && echo "  Assembly → $DOTNET_ASSEMBLY"
 [[ "$SITE_TYPE" == "2" ]]   && echo "  Service  → /etc/systemd/system/$DOMAIN.service"
-echo "  Tunnel   → $TUNNEL_NAME"
 echo ""
 
 if [[ "$SITE_TYPE" == "2" ]]; then

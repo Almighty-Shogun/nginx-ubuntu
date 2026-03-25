@@ -41,7 +41,7 @@ for arg in "$@"; do
 done
 
 # --- Checking if the domain is a valid domain name. ---
-if ! echo "$DOMAIN" | grep -qP '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$'; then
+if ! echo "$DOMAIN" | grep -qP '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9-]{1,63})+$'; then
   error "\"$DOMAIN\" doesn't look like a valid domain name."
 fi
 
@@ -260,9 +260,6 @@ success "NGINX reloaded."
 # --- Route domain through CloudFlare tunnel. ---
 info "Routing $DOMAIN through Cloudflare Tunnel..."
 
-cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$DOMAIN"
-[[ "$INCLUDE_WWW" == "Y" ]] && cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "www.$DOMAIN"
-
 success "DNS routed through tunnel."
 
 # --- Script execution summary. ---
@@ -285,5 +282,5 @@ if [[ "$SITE_TYPE" == "2" ]]; then
 fi
 
 if [[ "$INCLUDE_WWW" == "Y" ]]; then
-  warning "Don't forget to add a www → $DOMAIN redirect rule in your CloudFlare dashboard."
+  warning "Don't forget to add $DOMAIN rule in your CloudFlare Tunnel dashboard."
 fi

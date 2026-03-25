@@ -104,7 +104,7 @@ fi
 # --- Remind user to remove CloudFlare DNS records manually. ---
 DOT_COUNT=$(echo "$DOMAIN" | tr -cd '.' | wc -c)
 echo ""
-warning "Remember to manually delete the DNS record(s) in your Cloudflare dashboard:"
+warning "Remember to manually delete the tunnel record(s) in your CloudFlare Tunnel dashboard:"
 warning "  → CNAME record for: $DOMAIN"
 [[ "$DOT_COUNT" -eq 1 ]] && warning "  → CNAME record for: www.$DOMAIN"
 

@@ -63,12 +63,6 @@ if [[ "$INSTALL_POSTGRESQL" == true ]] && [[ "$SKIP_POSTGRESQL_PASSWORD" == fals
   done
 fi
 
-while true; do
-  read -rp "Enter a name for your CloudFlare tunnel (e.g. my-server): " tunnelName
-  [[ -n "$tunnelName" ]] && break
-  echo "You did not provide a tunnel name. Please try again."
-done
-
 # --- Updating system. ---
 info "Updating system packages..."
 apt update
@@ -146,7 +140,7 @@ if [[ "$INSTALL_DOTNET" == true ]]; then
   success ".NET SDK has been installed."
 fi
 
-# --- Installing CloudFlare tunnel. ---
+# --- Installing CloudFlared tunnel. ---
 info "Installing Cloudflared..."
 curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg > /dev/null
 echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main" | tee /etc/apt/sources.list.d/cloudflared.list > /dev/null
@@ -207,30 +201,9 @@ if [[ "$ADD_ALIASES" == true ]]; then
   fi
 fi
 
-curl -fsSL "$GITHUB_RAW/cloudflared/config.yml" -o /tmp/cloudflared-config.yml
-success "CloudFlared configuration has been downloaded."
-
-# --- CloudFlare tunnel setup. ---
-echo ""
-info "Open the URL in the browser to authenticate with CloudFlare."
-echo ""
-
+# --- Remove old CloudFlared files if existing. ---
 rm -f /root/.cloudflared/cert.pem
 rm -f /root/.cloudflared/*.json
-
-cloudflared tunnel login
-cloudflared tunnel create "$tunnelName"
-
-TUNNEL_ID=$(cloudflared tunnel list | grep "$tunnelName" | awk '{print $1}')
-mkdir -p /etc/cloudflared
-cp /tmp/cloudflared-config.yml /etc/cloudflared/config.yml
-rm /tmp/cloudflared-config.yml
-sed -i "s|{{TUNNEL_NAME}}|$tunnelName|g" /etc/cloudflared/config.yml
-sed -i "s|{{TUNNEL_ID}}|$TUNNEL_ID|g" /etc/cloudflared/config.yml
-
-cloudflared service install
-systemctl enable --now cloudflared
-success "Cloudflare Tunnel '$tunnelName' has been created and is running."
 
 # --- MariaDB configuration. ---
 if [[ "$INSTALL_MARIADB" == true ]] && [[ "$SKIP_MARIADB_PASSWORD" == false ]]; then
@@ -272,8 +245,9 @@ done
 echo ""
 
 warning "DO NOT FORGET TO DO THIS AFTERWARDS:"
-warning "1. Make sure CloudFlare tunnel has been configured properly."
-warning "2. Set CloudFlare SSL mode to Full (strict) in your Cloudflare dashboard"
+warning "1. Set CloudFlare SSL mode to Full (strict) in your Cloudflare dashboard"
+warning "2. Make sure CloudFlare tunnel has been configured properly."
+warning "3. After CloudFlare tunnel configuration, run: systemctl enable --now cloudflared"
 
 if [[ "$ADD_ALIASES" == true ]]; then
     warning "3. Run: source ~/.bashrc"

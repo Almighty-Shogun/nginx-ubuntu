@@ -38,9 +38,6 @@ The script asks the following questions upfront before doing anything:
 
 - MariaDB root password
 - PostgreSQL root password
-- Cloudflare tunnel name
-
-After that it runs fully unattended until the Cloudflare authentication step, where it prints a URL for you to open in your browser to authorise the tunnel.
 
 ### Optional arguments
 
@@ -64,16 +61,18 @@ sudo bash setup.sh --no-mariadb --php-versions=8.4,8.5
 ---
 
 ## After installation
-1. Set Cloudflare SSL mode to **Full (strict)** in your Cloudflare dashboard
-2. Run `source ~/.bashrc` to activate the aliases in your current session (skip if `--no-aliases` was used)
-3. Clean up the setup script: `rm setup.sh`
+1. Set CloudFlare SSL mode to Full (strict) in your Cloudflare dashboard.
+2. Make sure CloudFlare tunnel has been configured properly.
+3. After CloudFlare tunnel configuration, run: `systemctl enable --now cloudflared`
+4. Run `source ~/.bashrc` to activate the aliases in your current session (skip if `--no-aliases` was used)
+5. Clean up the setup script: `rm setup.sh`
 
 ---
 
 ## Managing websites
 
 ### `create-website`
-Creates a new website with the appropriate NGINX configuration, directory structure and Cloudflare Tunnel DNS record.
+Creates a new website with the appropriate NGINX configuration and directory structure. Prints a reminder to add the Cloudflare tunnel record manually to the dashboard.
 
 ```bash
 sudo create-website <domain.com> [options]
@@ -126,7 +125,7 @@ sudo disable-website <domain.com>
 ---
 
 ### `remove-website`
-Permanently removes a website and its files. Requires typing the domain name to confirm unless `--force` is used. Prints a reminder to delete the Cloudflare DNS record manually from the dashboard.
+Permanently removes a website and its files. Requires typing the domain name to confirm unless `--force` is used. Prints a reminder to delete the Cloudflare tunnel record manually from the dashboard.
 
 ```bash
 sudo remove-website <domain.com> [options]

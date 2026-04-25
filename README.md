@@ -1,3 +1,9 @@
+<a href="https://shogun.ms" target="_blank" rel="noopener">
+	<img src="https://cdn.shogun.ms/assets/branding/app-icon-256.svg" alt="Shogun app-icon" height="62"/>
+</a>
+
+---
+
 # Ubuntu 24.04 + NGINX
 A personal setup script that installs and configures a production-ready NGINX server on Ubuntu 24.04 with Cloudflare Tunnel support.
 

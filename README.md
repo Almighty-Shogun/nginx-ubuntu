@@ -158,6 +158,11 @@ Re-downloads and replaces all installed scripts, NGINX templates and NGINX snipp
 
 ```bash
 sudo update-files [options]
+
+# Or download the new files from GitHub
+curl -fsSL https://raw.githubusercontent.com/Almighty-Shogun/nginx-ubuntu/refs/heads/main/scripts/update-files -o /usr/local/bin/update-files
+chmod +x /usr/local/bin/update-files
+sudo update-files [options]
 ```
 
 | Argument | Description |

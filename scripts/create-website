@@ -377,7 +377,7 @@ fi
 echo ""
 
 if [[ "$SITE_TYPE" == "2" ]] || [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
-  warning "Start the service once your app is deployed: systemctl start $DOMAIN"
+  warning "Start the service once your app is deployed: systemctl enable --now $DOMAIN"
 fi
 
 if [[ "$INCLUDE_WWW" == "Y" ]]; then

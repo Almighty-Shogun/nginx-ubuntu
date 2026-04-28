@@ -19,7 +19,7 @@ TEMPLATES_PATH="/etc/nginx/templates"
 
 # --- Check if script is executed as sudo with the correct arguments. ---
 [[ $EUID -ne 0 ]] && error "Run this script with sudo."
-[[ $# -lt 1 ]] && error "Usage: sudo create-website <domain.com> [--type=php|dotnet|vue|html] [--php-version=8.3] [--port=5000] [--assembly=MyProject]"
+[[ $# -lt 1 ]] && error "Usage: sudo create-website <domain.com> [--type=php|dotnet|vue|html|node|bun] [--php-version=8.3] [--port=3000] [--assembly=MyProject] [--start-command='npm run start']"
 
 DOMAIN="$1"
 shift
@@ -27,18 +27,29 @@ shift
 # --- Parse optional arguments. ---
 SITE_TYPE_ARG=""
 PHP_VERSION_ARG=""
-DOTNET_PORT_ARG=""
+APP_PORT_ARG=""
 DOTNET_ASSEMBLY_ARG=""
+START_COMMAND_ARG=""
 
 for arg in "$@"; do
   case $arg in
     --type=*) SITE_TYPE_ARG="${arg#*=}" ;;
     --php-version=*) PHP_VERSION_ARG="${arg#*=}" ;;
-    --port=*) DOTNET_PORT_ARG="${arg#*=}" ;;
+    --port=*) APP_PORT_ARG="${arg#*=}" ;;
     --assembly=*) DOTNET_ASSEMBLY_ARG="${arg#*=}" ;;
+    --start-command=*) START_COMMAND_ARG="${arg#*=}" ;;
     *) error "Unknown argument: $arg" ;;
   esac
 done
+
+validate_port() {
+  local port="$1"
+  [[ "$port" =~ ^[0-9]+$ ]] && [[ "$port" -ge 1 ]] && [[ "$port" -le 65535 ]]
+}
+
+escape_sed_replacement() {
+  printf '%s' "$1" | sed 's/[&|\\]/\\&/g'
+}
 
 # --- Checking if the domain is a valid domain name. ---
 if ! echo "$DOMAIN" | grep -qP '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9-]{1,63})+$'; then
@@ -60,7 +71,9 @@ if [[ -n "$SITE_TYPE_ARG" ]]; then
     dotnet) SITE_TYPE="2" ;;
     vue) SITE_TYPE="3" ;;
     html) SITE_TYPE="4" ;;
-    *) error "Invalid --type value. Use php, dotnet, vue or html." ;;
+    node) SITE_TYPE="5" ;;
+    bun) SITE_TYPE="6" ;;
+    *) error "Invalid --type value. Use php, dotnet, vue, html, node or bun." ;;
   esac
 else
   echo ""
@@ -70,8 +83,10 @@ else
   echo "  [2] ASP.NET"
   echo "  [3] Vue"
   echo "  [4] HTML"
+  echo "  [5] Node"
+  echo "  [6] Bun"
   echo ""
-  read -rp "Enter number [1-4]: " SITE_TYPE
+  read -rp "Enter number [1-6]: " SITE_TYPE
 fi
 
 case $SITE_TYPE in
@@ -83,6 +98,10 @@ case $SITE_TYPE in
     TEMPLATE_PATH="$TEMPLATES_PATH/nginx-vue.template" ;;
   4) SITE_LABEL="HTML"
     TEMPLATE_PATH="$TEMPLATES_PATH/nginx-html.template" ;;
+  5) SITE_LABEL="Node"
+    TEMPLATE_PATH="$TEMPLATES_PATH/nginx-node.template" ;;
+  6) SITE_LABEL="Bun"
+    TEMPLATE_PATH="$TEMPLATES_PATH/nginx-node.template" ;;
   *) error "Invalid choice." ;;
 esac
 
@@ -123,17 +142,19 @@ if [[ "$SITE_TYPE" == "1" ]]; then
 fi
 
 # --- Options for ASP.NET websites. ---
-DOTNET_PORT=""
+APP_PORT=""
 DOTNET_ASSEMBLY=""
 if [[ "$SITE_TYPE" == "2" ]]; then
-  if [[ -n "$DOTNET_PORT_ARG" ]]; then
-    DOTNET_PORT="$DOTNET_PORT_ARG"
-    success "Using port $DOTNET_PORT"
+  if [[ -n "$APP_PORT_ARG" ]]; then
+    validate_port "$APP_PORT_ARG" || error "Invalid --port value. Use a number between 1 and 65535."
+    APP_PORT="$APP_PORT_ARG"
+    success "Using port $APP_PORT"
   else
     echo ""
-    read -rp "Which localhost port is your ASP.NET app running on? [default: 5000]: " DOTNET_PORT
-    DOTNET_PORT="${DOTNET_PORT:-5000}"
-    success "Using port $DOTNET_PORT"
+    read -rp "Which localhost port is your ASP.NET app running on? [default: 5000]: " APP_PORT
+    APP_PORT="${APP_PORT:-5000}"
+    validate_port "$APP_PORT" || error "Invalid port. Use a number between 1 and 65535."
+    success "Using port $APP_PORT"
   fi
 
   if [[ -n "$DOTNET_ASSEMBLY_ARG" ]]; then
@@ -145,6 +166,46 @@ if [[ "$SITE_TYPE" == "2" ]]; then
     [[ -z "$DOTNET_ASSEMBLY" ]] && error "You did not provide an assembly name."
     success "Using assembly $DOTNET_ASSEMBLY"
   fi
+fi
+
+# --- Options for Node/Bun websites. ---
+START_COMMAND=""
+if [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
+  DEFAULT_PORT="3000"
+  DEFAULT_START_COMMAND="npm run start"
+  RUNTIME_BINARY="node"
+
+  if [[ "$SITE_TYPE" == "6" ]]; then
+    DEFAULT_START_COMMAND="bun run start"
+    RUNTIME_BINARY="bun"
+  fi
+
+  if [[ -n "$APP_PORT_ARG" ]]; then
+    validate_port "$APP_PORT_ARG" || error "Invalid --port value. Use a number between 1 and 65535."
+    APP_PORT="$APP_PORT_ARG"
+    success "Using port $APP_PORT"
+  else
+    echo ""
+    read -rp "Which localhost port should the $SITE_LABEL app listen on? [default: $DEFAULT_PORT]: " APP_PORT
+    APP_PORT="${APP_PORT:-$DEFAULT_PORT}"
+    validate_port "$APP_PORT" || error "Invalid port. Use a number between 1 and 65535."
+    success "Using port $APP_PORT"
+  fi
+
+  if [[ -n "$START_COMMAND_ARG" ]]; then
+    START_COMMAND="$START_COMMAND_ARG"
+    success "Using start command: $START_COMMAND"
+  else
+    echo ""
+    read -rp "Start command from /var/www/$DOMAIN/app [default: $DEFAULT_START_COMMAND]: " START_COMMAND
+    START_COMMAND="${START_COMMAND:-$DEFAULT_START_COMMAND}"
+    success "Using start command: $START_COMMAND"
+  fi
+
+  [[ -z "$START_COMMAND" ]] && error "You did not provide a start command."
+  [[ "$START_COMMAND" == *$'\n'* ]] && error "Start command cannot contain newlines."
+
+  command -v "$RUNTIME_BINARY" &>/dev/null || warning "$RUNTIME_BINARY was not found in PATH. Install it before starting the $DOMAIN service."
 fi
 
 # --- Determine www coverage. ---
@@ -162,12 +223,15 @@ echo "  Domain       : $DOMAIN"
 [[ "$INCLUDE_WWW" == "Y" ]] && echo "  Also covers  : www.$DOMAIN"
 echo "  Type         : $SITE_LABEL"
 [[ -n "$PHP_VERSION" ]]     && echo "  PHP version  : $PHP_VERSION"
-[[ -n "$DOTNET_PORT" ]]     && echo "  .NET port    : $DOTNET_PORT"
+[[ -n "$APP_PORT" ]]        && echo "  App port     : $APP_PORT"
 [[ -n "$DOTNET_ASSEMBLY" ]] && echo "  .NET assembly: $DOTNET_ASSEMBLY"
+[[ -n "$START_COMMAND" ]]   && echo "  Start command: $START_COMMAND"
 echo "  Webroot      : /var/www/$DOMAIN/public"
 echo "  Logs         : /var/www/$DOMAIN/logs"
 echo "  NGINX config : /etc/nginx/conf.d/$DOMAIN.conf"
-[[ "$SITE_TYPE" == "2" ]] && echo "  Service      : /etc/systemd/system/$DOMAIN.service"
+if [[ "$SITE_TYPE" == "2" ]] || [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
+  echo "  Service      : /etc/systemd/system/$DOMAIN.service"
+fi
 echo ""
 read -rp "Proceed? [Y/n] " CONFIRM
 CONFIRM="${CONFIRM:-Y}"
@@ -176,8 +240,8 @@ CONFIRM="${CONFIRM:-Y}"
 # --- Create directory structure. ---
 info "Creating directory structure..."
 
-# Only ASP.NET needs the app directory
-if [[ "$SITE_TYPE" == "2" ]]; then
+# App-server types need the app directory
+if [[ "$SITE_TYPE" == "2" ]] || [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
   mkdir -p "/var/www/$DOMAIN"/{public,logs,app}
 else
   mkdir -p "/var/www/$DOMAIN"/{public,logs}
@@ -199,6 +263,26 @@ case $SITE_TYPE in
   4)
     sed "s/{{DOMAIN}}/$DOMAIN/g" "$TEMPLATES_PATH/html_index.template" > "/var/www/$DOMAIN/public/index.html"
     chown www-data:www-data "/var/www/$DOMAIN/public/index.html" ;;
+  5)
+    sed \
+      -e "s|{{DOMAIN}}|$DOMAIN|g" \
+      -e "s|{{APP_PORT}}|$APP_PORT|g" \
+      "$TEMPLATES_PATH/node_package.template" > "/var/www/$DOMAIN/app/package.json"
+    sed \
+      -e "s|{{DOMAIN}}|$DOMAIN|g" \
+      -e "s|{{APP_PORT}}|$APP_PORT|g" \
+      "$TEMPLATES_PATH/node_server.template" > "/var/www/$DOMAIN/app/server.js"
+    chown www-data:www-data "/var/www/$DOMAIN/app/package.json" "/var/www/$DOMAIN/app/server.js" ;;
+  6)
+    sed \
+      -e "s|{{DOMAIN}}|$DOMAIN|g" \
+      -e "s|{{APP_PORT}}|$APP_PORT|g" \
+      "$TEMPLATES_PATH/bun_package.template" > "/var/www/$DOMAIN/app/package.json"
+    sed \
+      -e "s|{{DOMAIN}}|$DOMAIN|g" \
+      -e "s|{{APP_PORT}}|$APP_PORT|g" \
+      "$TEMPLATES_PATH/bun_server.template" > "/var/www/$DOMAIN/app/server.js"
+    chown www-data:www-data "/var/www/$DOMAIN/app/package.json" "/var/www/$DOMAIN/app/server.js" ;;
 esac
 
 success "Directories created."
@@ -210,7 +294,8 @@ NGINX_CONF="/etc/nginx/conf.d/$DOMAIN.conf"
 sed \
   -e "s|{{DOMAIN}}|$DOMAIN|g" \
   -e "s|{{PHP_VERSION}}|$PHP_VERSION|g" \
-  -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
+  -e "s|{{DOTNET_PORT}}|$APP_PORT|g" \
+  -e "s|{{APP_PORT}}|$APP_PORT|g" \
   "$TEMPLATE_PATH" > "$NGINX_CONF"
 
 if [[ "$INCLUDE_WWW" == "N" ]]; then
@@ -229,7 +314,29 @@ if [[ "$SITE_TYPE" == "2" ]]; then
   sed \
     -e "s|{{DOMAIN}}|$DOMAIN|g" \
     -e "s|{{ASSEMBLY}}|$DOTNET_ASSEMBLY|g" \
-    -e "s|{{DOTNET_PORT}}|$DOTNET_PORT|g" \
+    -e "s|{{DOTNET_PORT}}|$APP_PORT|g" \
+    "$SERVICE_TEMPLATE" > "/etc/systemd/system/$DOMAIN.service"
+
+  systemctl daemon-reload
+  systemctl enable "$DOMAIN"
+
+  success "Systemd service created and enabled."
+fi
+
+# --- Create systemd service for Node/Bun. ---
+if [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
+  info "Creating systemd service..."
+
+  SERVICE_TEMPLATE="$TEMPLATES_PATH/node-app.service.template"
+  [[ ! -f "$SERVICE_TEMPLATE" ]] && error "Service template not found at $SERVICE_TEMPLATE."
+
+  START_COMMAND_ESCAPED="$(escape_sed_replacement "$START_COMMAND")"
+
+  sed \
+    -e "s|{{DOMAIN}}|$DOMAIN|g" \
+    -e "s|{{SITE_LABEL}}|$SITE_LABEL|g" \
+    -e "s|{{APP_PORT}}|$APP_PORT|g" \
+    -e "s|{{START_COMMAND}}|$START_COMMAND_ESCAPED|g" \
     "$SERVICE_TEMPLATE" > "/etc/systemd/system/$DOMAIN.service"
 
   systemctl daemon-reload
@@ -244,7 +351,9 @@ nginx -t || {
   warning "NGINX test failed — rolling back."
   rm -f "$NGINX_CONF"
   rm -rf "/var/www/$DOMAIN"
-  [[ "$SITE_TYPE" == "2" ]] && rm -f "/etc/systemd/system/$DOMAIN.service"
+  if [[ "$SITE_TYPE" == "2" ]] || [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
+    rm -f "/etc/systemd/system/$DOMAIN.service"
+  fi
   error "Fix the config at $NGINX_CONF then re-enable manually."
 }
 
@@ -260,12 +369,14 @@ echo "  Logs     → /var/www/$DOMAIN/logs"
 echo "  Config   → /etc/nginx/conf.d/$DOMAIN.conf"
 echo "  Type     → $SITE_LABEL"
 [[ -n "$PHP_VERSION" ]]     && echo "  PHP      → $PHP_VERSION"
-[[ -n "$DOTNET_PORT" ]]     && echo "  Port     → $DOTNET_PORT"
+[[ -n "$APP_PORT" ]]        && echo "  Port     → $APP_PORT"
 [[ -n "$DOTNET_ASSEMBLY" ]] && echo "  Assembly → $DOTNET_ASSEMBLY"
-[[ "$SITE_TYPE" == "2" ]]   && echo "  Service  → /etc/systemd/system/$DOMAIN.service"
+if [[ "$SITE_TYPE" == "2" ]] || [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
+  echo "  Service  → /etc/systemd/system/$DOMAIN.service"
+fi
 echo ""
 
-if [[ "$SITE_TYPE" == "2" ]]; then
+if [[ "$SITE_TYPE" == "2" ]] || [[ "$SITE_TYPE" == "5" ]] || [[ "$SITE_TYPE" == "6" ]]; then
   warning "Start the service once your app is deployed: systemctl start $DOMAIN"
 fi
 

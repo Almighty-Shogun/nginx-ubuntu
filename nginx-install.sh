@@ -177,7 +177,7 @@ if [[ "$INSTALL_POSTGRESQL" == true ]] && [[ "$INSTALL_DATABASE_SCRIPTS" == true
 fi
 
 mkdir -p /etc/nginx/templates
-for template in nginx-php nginx-dotnet nginx-vue nginx-html dotnet-app.service asp_index php_index vue_index html_index; do
+for template in nginx-php nginx-dotnet nginx-vue nginx-html nginx-node dotnet-app.service node-app.service asp_index php_index vue_index html_index node_package node_server bun_package bun_server; do
   curl -fsSL "$GITHUB_RAW/templates/$template.template" -o /etc/nginx/templates/$template.template
   success "$template.template has been installed."
 done

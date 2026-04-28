@@ -1,0 +1,13 @@
+const port = Number(process.env.PORT || "{{APP_PORT}}");
+
+Bun.serve({
+  hostname: "127.0.0.1",
+  port,
+  fetch() {
+    return new Response(`<h1>{{DOMAIN}} is live</h1><p>Bun server running on port ${port}</p>`, {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  },
+});
+
+console.log(`{{DOMAIN}} listening on http://127.0.0.1:${port}`);

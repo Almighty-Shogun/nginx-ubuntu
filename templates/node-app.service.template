@@ -1,0 +1,18 @@
+[Unit]
+Description={{DOMAIN}} {{SITE_LABEL}} application
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/{{DOMAIN}}/app
+ExecStart=/usr/bin/env {{START_COMMAND}}
+Restart=always
+RestartSec=10
+SyslogIdentifier={{DOMAIN}}
+Environment=NODE_ENV=production
+Environment=PORT={{APP_PORT}}
+
+[Install]
+WantedBy=multi-user.target

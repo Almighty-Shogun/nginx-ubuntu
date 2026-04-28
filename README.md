@@ -25,7 +25,7 @@ A personal setup script that installs and configures a production-ready NGINX se
 
 - Site management scripts — `create-website`, `enable-website`, `disable-website`, `remove-website` and `update-files`
 - Database management scripts — `mariadb-add-user`, `mariadb-remove-user`, `mariadb-update-password`, `postgresql-add-user`, `postgresql-remove-user` and `postgresql-update-password`
-- NGINX templates for PHP, ASP.NET, Vue and HTML projects
+- NGINX templates for PHP, ASP.NET, Vue, HTML, Node and Bun projects
 - Shared NGINX configs — Cloudflare real IP passthrough, security headers, FastCGI
 - Cloudflare Tunnel with your chosen tunnel name
 - Custom command aliases added to `~/.bashrc`
@@ -86,10 +86,11 @@ sudo create-website <domain.com> [options]
 
 | Argument | Values | Description |
 |---|---|---|
-| `--type` | `php`, `dotnet`, `vue`, `html` | The type of website |
+| `--type` | `php`, `dotnet`, `vue`, `html`, `node`, `bun` | The type of website |
 | `--php-version` | e.g. `8.4` | PHP version to use — only valid when `--type=php` |
-| `--port` | e.g. `5000` | Port the ASP.NET app runs on — only valid when `--type=dotnet` |
+| `--port` | e.g. `3000` | Localhost port the ASP.NET, Node or Bun app listens on |
 | `--assembly` | e.g. `MyProject` | Name of the `.dll` file — only valid when `--type=dotnet` |
+| `--start-command` | e.g. `npm run start` | Start command for Node or Bun apps — only valid when `--type=node` or `--type=bun` |
 
 Examples:
 
@@ -105,10 +106,19 @@ sudo create-website domain.com --type=vue
 
 # Example for a HTML website.
 sudo create-website domain.com --type=html
+
+# Example for a Node website.
+sudo create-website domain.com --type=node --port=3000 --start-command="npm run start"
+
+# Example for a Bun website.
+sudo create-website domain.com --type=bun --port=3000 --start-command="bun run start"
 ```
 
 > [!NOTE]
 > Root domains automatically get a `www` DNS record. Subdomains do not.
+
+> [!NOTE]
+> Node and Bun site creation adds an NGINX reverse proxy, starter app files in `/var/www/<domain>/app`, and a systemd service. Install the selected runtime on the server before starting the service, and make sure `node`, `npm` or `bun` is available in the systemd service PATH.
 
 ---
 
